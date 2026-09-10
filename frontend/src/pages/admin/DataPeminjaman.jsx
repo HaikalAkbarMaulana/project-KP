@@ -1,0 +1,376 @@
+import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import {
+  Check, X, PackageCheck, PackageOpen, Search, Download, Phone, AlertTriangle,
+} from 'lucide-react';
+
+import { api, keQuery } from '../../lib/api';
+import { useAmbilData } from '../../hooks/useAmbilData';
+import { useTundaNilai } from '../../hooks/useTundaNilai';
+import {
+  STATUS_LABEL, STATUS_WARNA, angka, tanggalSingkat, sisaHari,
+} from '../../lib/format';
+import Modal from '../../components/Modal';
+import { Memuat, PesanGalat, Kosong } from '../../components/Keadaan';
+
+const PER_HALAMAN = 25;
+
+const SARINGAN = [
+  { nilai: '', label: 'Semua' },
+  { nilai: 'pending', label: 'Menunggu' },
+  { nilai: 'disetujui', label: 'Disetujui' },
+  { nilai: 'dipinjam', label: 'Sedang Dipinjam' },
+  { nilai: 'dikembalikan', label: 'Sudah Kembali' },
+  { nilai: 'ditolak', label: 'Ditolak' },
+];
+
+/** Aksi yang tersedia untuk tiap status, sejalan dengan aturan di backend. */
+const AKSI_PER_STATUS = {
+  pending: [
+    { status: 'disetujui', label: 'Setujui', ikon: Check, gaya: 'hover:bg-brand-50 hover:text-brand-700' },
+    { status: 'ditolak', label: 'Tolak', ikon: X, gaya: 'hover:bg-rose-50 hover:text-rose-600', mintaCatatan: true },
+  ],
+  disetujui: [
+    { status: 'dipinjam', label: 'Tandai diambil', ikon: PackageOpen, gaya: 'hover:bg-sky-50 hover:text-sky-700' },
+    { status: 'dibatalkan', label: 'Batalkan', ikon: X, gaya: 'hover:bg-rose-50 hover:text-rose-600', mintaCatatan: true },
+  ],
+  dipinjam: [
+    { status: 'dikembalikan', label: 'Catat pengembalian', ikon: PackageCheck, gaya: 'hover:bg-slate-100 hover:text-ink-900' },
+  ],
+};
+
+export default function DataPeminjaman() {
+  const [paramUrl, setParamUrl] = useSearchParams();
+  const status = paramUrl.get('status') || '';
+  const hanyaTerlambat = paramUrl.get('terlambat') === '1';
+
+  const [pencarian, setPencarian] = useState('');
+  const [halaman, setHalaman] = useState(1);
+  const [aksiTertunda, setAksiTertunda] = useState(null);
+  const [pesanUnduh, setPesanUnduh] = useState('');
+  const [galatAksi, setGalatAksi] = useState('');
+
+  const kataKunci = useTundaNilai(pencarian);
+
+  const path = useMemo(
+    () => `/peminjaman${keQuery({
+      status,
+      terlambat: hanyaTerlambat ? '1' : '',
+      q: kataKunci,
+      halaman,
+      per_halaman: PER_HALAMAN,
+    })}`,
+    [status, hanyaTerlambat, kataKunci, halaman]
+  );
+
+  const { data, memuat, galat, muatUlang } = useAmbilData(path);
+  const daftar = data?.data ?? [];
+  const total = data?.halaman?.total ?? 0;
+  const totalHalaman = Math.max(Math.ceil(total / PER_HALAMAN), 1);
+
+  function pilihSaringan(nilai) {
+    setParamUrl(nilai ? { status: nilai } : {});
+    setHalaman(1);
+  }
+
+  async function jalankanAksi(item, aksi, catatan) {
+    setGalatAksi('');
+    try {
+      await api.patch(`/peminjaman/${item.id}/status`, {
+        status: aksi.status,
+        ...(catatan ? { catatan_admin: catatan } : {}),
+      });
+      muatUlang();
+    } catch (err) {
+      setGalatAksi(err.message);
+    }
+  }
+
+  async function unduhLaporan() {
+    setPesanUnduh('');
+    try {
+      await api.unduh(`/laporan/peminjaman.csv${keQuery({ status })}`, 'riwayat-peminjaman.csv');
+    } catch (err) {
+      setPesanUnduh(err.message);
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+        <div>
+          <h1 className="font-display text-xl font-bold text-ink-900">Peminjaman</h1>
+          <p className="text-sm text-slate-500">
+            {angka(total)} pengajuan{hanyaTerlambat ? ' yang terlambat dikembalikan' : ''}.
+          </p>
+        </div>
+        <button
+          type="button" onClick={unduhLaporan}
+          className="flex items-center gap-2 self-start rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+        >
+          <Download size={16} /> Unduh CSV
+        </button>
+      </div>
+
+      <PesanGalat pesan={pesanUnduh} />
+      <PesanGalat pesan={galatAksi} />
+
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap gap-2">
+          {SARINGAN.map((s) => (
+            <button
+              key={s.nilai || 'semua'}
+              type="button"
+              onClick={() => pilihSaringan(s.nilai)}
+              className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+                status === s.nilai && !hanyaTerlambat
+                  ? 'bg-ink-900 text-white'
+                  : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              {s.label}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => { setParamUrl({ terlambat: '1' }); setHalaman(1); }}
+            className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+              hanyaTerlambat
+                ? 'bg-rose-600 text-white'
+                : 'border border-rose-200 bg-white text-rose-600 hover:bg-rose-50'
+            }`}
+          >
+            <AlertTriangle size={14} /> Terlambat
+          </button>
+        </div>
+
+        <div className="relative lg:w-72">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            value={pencarian}
+            onChange={(e) => { setPencarian(e.target.value); setHalaman(1); }}
+            placeholder="Cari nama guru atau kode..."
+            aria-label="Cari peminjaman"
+            className="input pl-9"
+          />
+        </div>
+      </div>
+
+      <PesanGalat pesan={galat} onCobaLagi={muatUlang} />
+
+      {memuat ? (
+        <Memuat />
+      ) : daftar.length === 0 ? (
+        <Kosong
+          judul="Tidak ada pengajuan"
+          keterangan="Pengajuan dari guru akan muncul di sini begitu dikirim lewat halaman publik."
+        />
+      ) : (
+        <>
+          <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <table className="w-full min-w-[900px] text-left text-sm">
+              <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                <tr>
+                  <th className="px-5 py-3">Kode</th>
+                  <th className="px-5 py-3">Peminjam</th>
+                  <th className="px-5 py-3">Alat</th>
+                  <th className="px-5 py-3 text-center">Jumlah</th>
+                  <th className="px-5 py-3">Jadwal</th>
+                  <th className="px-5 py-3">Status</th>
+                  <th className="px-5 py-3 text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {daftar.map((item) => (
+                  <BarisPeminjaman
+                    key={item.id}
+                    item={item}
+                    onAksi={(aksi) => {
+                      if (aksi.mintaCatatan) setAksiTertunda({ item, aksi });
+                      else jalankanAksi(item, aksi);
+                    }}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {totalHalaman > 1 && (
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm text-slate-500">Halaman {halaman} dari {totalHalaman}</p>
+              <div className="flex gap-2">
+                <button
+                  type="button" onClick={() => setHalaman((h) => h - 1)} disabled={halaman <= 1}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 disabled:opacity-40"
+                >
+                  Sebelumnya
+                </button>
+                <button
+                  type="button" onClick={() => setHalaman((h) => h + 1)} disabled={halaman >= totalHalaman}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 disabled:opacity-40"
+                >
+                  Berikutnya
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      <DialogCatatan
+        tertunda={aksiTertunda}
+        onTutup={() => setAksiTertunda(null)}
+        onKirim={async (catatan) => {
+          await jalankanAksi(aksiTertunda.item, aksiTertunda.aksi, catatan);
+          setAksiTertunda(null);
+        }}
+      />
+    </div>
+  );
+}
+
+function BarisPeminjaman({ item, onAksi }) {
+  const sisa = sisaHari(item.tanggal_rencana_kembali);
+  const terlambat = item.status === 'dipinjam' && sisa < 0;
+  const aksi = AKSI_PER_STATUS[item.status] ?? [];
+
+  return (
+    <tr className={terlambat ? 'bg-rose-50/50' : 'hover:bg-slate-50'}>
+      <td className="px-5 py-3 font-mono text-xs text-slate-500">{item.kode_peminjaman}</td>
+
+      <td className="px-5 py-3">
+        <p className="font-medium text-ink-900">{item.nama_peminjam}</p>
+        <p className="text-xs text-slate-400">
+          {[item.mapel, item.nip_peminjam].filter(Boolean).join(' · ') || '—'}
+        </p>
+        {item.no_hp && (
+          <a
+            href={`tel:${item.no_hp.replace(/[^0-9+]/g, '')}`}
+            className="mt-0.5 inline-flex items-center gap-1 text-xs text-brand-700 hover:underline"
+          >
+            <Phone size={11} /> {item.no_hp}
+          </a>
+        )}
+      </td>
+
+      <td className="px-5 py-3">
+        <p className="text-slate-700">{item.alat?.nama_alat}</p>
+        <p className="text-xs text-slate-400">{item.keperluan}</p>
+      </td>
+
+      <td className="px-5 py-3 text-center text-slate-600">{item.jumlah}</td>
+
+      <td className="px-5 py-3 text-slate-600">
+        <p>{tanggalSingkat(item.tanggal_pinjam)} → {tanggalSingkat(item.tanggal_rencana_kembali)}</p>
+        {terlambat && (
+          <p className="text-xs font-semibold text-rose-600">Telat {Math.abs(sisa)} hari</p>
+        )}
+        {item.tanggal_kembali_aktual && (
+          <p className="text-xs text-slate-400">Kembali {tanggalSingkat(item.tanggal_kembali_aktual)}</p>
+        )}
+      </td>
+
+      <td className="px-5 py-3">
+        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${STATUS_WARNA[item.status]}`}>
+          {STATUS_LABEL[item.status]}
+        </span>
+        {item.catatan_admin && (
+          <p className="mt-1 max-w-[180px] truncate text-xs text-slate-400" title={item.catatan_admin}>
+            {item.catatan_admin}
+          </p>
+        )}
+      </td>
+
+      <td className="px-5 py-3">
+        <div className="flex justify-end gap-1">
+          {aksi.length === 0 ? (
+            <span className="text-xs text-slate-300">—</span>
+          ) : (
+            aksi.map((a) => (
+              <button
+                key={a.status}
+                type="button"
+                title={a.label}
+                onClick={() => onAksi(a)}
+                className={`rounded-lg p-2 text-slate-500 ${a.gaya}`}
+              >
+                <a.ikon size={16} />
+                <span className="sr-only">{a.label}</span>
+              </button>
+            ))
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function DialogCatatan({ tertunda, onTutup, onKirim }) {
+  const [catatan, setCatatan] = useState('');
+  const [mengirim, setMengirim] = useState(false);
+  const [idTerakhir, setIdTerakhir] = useState(null);
+
+  const penanda = tertunda ? `${tertunda.item.id}-${tertunda.aksi.status}` : null;
+  if (penanda !== idTerakhir) {
+    setIdTerakhir(penanda);
+    setCatatan('');
+  }
+
+  async function kirim(e) {
+    e.preventDefault();
+    setMengirim(true);
+    try {
+      await onKirim(catatan.trim());
+    } finally {
+      setMengirim(false);
+    }
+  }
+
+  return (
+    <Modal
+      terbuka={!!tertunda}
+      judul={tertunda ? `${tertunda.aksi.label} pengajuan` : ''}
+      onTutup={onTutup}
+      lebar="max-w-md"
+    >
+      {tertunda && (
+        <form onSubmit={kirim} className="space-y-4">
+          <p className="text-sm text-slate-600">
+            Pengajuan <span className="font-mono text-xs">{tertunda.item.kode_peminjaman}</span> atas
+            nama <strong>{tertunda.item.nama_peminjam}</strong> untuk{' '}
+            <strong>{tertunda.item.alat?.nama_alat}</strong>.
+          </p>
+
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-slate-600">
+              Alasan / catatan untuk guru
+            </span>
+            <textarea
+              rows={3} maxLength={500} value={catatan} onChange={(e) => setCatatan(e.target.value)}
+              className="input"
+              placeholder="Contoh: Alat sedang diperbaiki, silakan ajukan minggu depan."
+            />
+            <span className="mt-1 block text-xs text-slate-400">
+              Catatan ini akan terlihat oleh guru saat melacak pengajuannya.
+            </span>
+          </label>
+
+          <div className="flex justify-end gap-2">
+            <button
+              type="button" onClick={onTutup}
+              className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+            >
+              Batal
+            </button>
+            <button
+              type="submit" disabled={mengirim}
+              className="rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+            >
+              {mengirim ? 'Memproses...' : tertunda.aksi.label}
+            </button>
+          </div>
+        </form>
+      )}
+    </Modal>
+  );
+}
