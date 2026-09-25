@@ -59,7 +59,7 @@ export default function AkunAdmin() {
       <PesanGalat pesan={galatAksi} />
       <PesanGalat pesan={galat} onCobaLagi={muatUlang} />
 
-      {memuat ? (
+      {galat ? null : memuat ? (
         <Memuat />
       ) : daftar.length === 0 ? (
         <Kosong judul="Belum ada akun admin" keterangan="Tambahkan petugas lab lewat tombol di atas." />

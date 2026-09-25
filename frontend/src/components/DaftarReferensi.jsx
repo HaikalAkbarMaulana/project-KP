@@ -51,7 +51,7 @@ export default function DaftarReferensi({ judul, keterangan, endpoint, kolomNama
 
       <PesanGalat pesan={galat} onCobaLagi={muatUlang} />
 
-      {memuat ? (
+      {galat ? null : memuat ? (
         <Memuat />
       ) : daftar.length === 0 ? (
         <Kosong judul={`Belum ada ${label.toLowerCase()}`} keterangan="Tambahkan lewat tombol di atas." />

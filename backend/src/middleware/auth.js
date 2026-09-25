@@ -1,5 +1,9 @@
 import { supabaseAdmin } from '../supabaseClient.js';
-import { GalatAplikasi } from '../lib/galat.js';
+import {
+  GalatAplikasi,
+  karenaDatabaseTakTerjangkau,
+  PESAN_DATABASE_TAK_TERJANGKAU,
+} from '../lib/galat.js';
 import { karenaKolomHilang, PESAN_SKEMA_LAMA } from '../lib/periksaSkema.js';
 
 /**
@@ -14,6 +18,14 @@ async function bacaAdminDariToken(req) {
   if (!token) return { profil: null, galat: null };
 
   const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
+
+  // Supabase yang tidak terjangkau jangan dilaporkan sebagai "sesi tidak
+  // valid" — itu akan membuat admin mengira harus login ulang, padahal
+  // masalahnya koneksi internet server.
+  if (karenaDatabaseTakTerjangkau(userError)) {
+    throw new GalatAplikasi(PESAN_DATABASE_TAK_TERJANGKAU, 503);
+  }
+
   if (userError || !userData?.user) {
     return { profil: null, galat: { status: 401, pesan: 'Sesi tidak valid atau sudah kedaluwarsa. Silakan masuk lagi.' } };
   }

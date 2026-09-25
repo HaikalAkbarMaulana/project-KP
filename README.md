@@ -35,6 +35,21 @@ Guru mengisi form  →  pending
 
 ---
 
+## Cara Cepat Menjalankan (Windows)
+
+Setelah Supabase dan kedua berkas `.env` siap (lihat langkah 1–3 di bawah):
+
+| Berkas | Fungsi |
+| --- | --- |
+| **`jalankan-web.bat`** | Klik dua kali. Menyalakan backend dan frontend di dua jendela terpisah, lalu membuka browser. Dependensi dipasang otomatis saat pertama kali. |
+| **`hentikan-web.bat`** | Klik dua kali untuk mematikan keduanya. Pakai juga bila muncul error `EADDRINUSE` / port sudah dipakai. |
+
+`jalankan-web.bat` aman diklik berulang: server yang sudah menyala tidak dinyalakan
+dua kali. Selama aplikasi dipakai, jendela **LabPinjam - Backend** dan
+**LabPinjam - Frontend** harus tetap terbuka.
+
+---
+
 ## Struktur Proyek
 
 ```
@@ -124,7 +139,7 @@ npm install
 npm run dev
 ```
 
-Frontend berjalan di `http://localhost:5173`. Masuk sebagai admin lewat
+Frontend berjalan di `http://127.0.0.1:5173`. Masuk sebagai admin lewat
 `/admin/masuk` (tautannya juga ada di footer halaman publik).
 
 ---

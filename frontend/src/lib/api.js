@@ -15,14 +15,33 @@ async function ambilToken() {
   return data?.session?.access_token || null;
 }
 
+// Lebih longgar dari batas waktu backend ke Supabase (15 detik), supaya
+// dalam keadaan normal pesan penjelasan dari backend yang sampai lebih dulu.
+// Batas ini jaring pengaman terakhir: apa pun yang terjadi di server,
+// pengguna tidak boleh menatap tulisan "Memuat..." selamanya.
+const BATAS_WAKTU_MS = 30_000;
+
 async function permintaan(path, { metode = 'GET', data, signal } = {}) {
   const token = await ambilToken();
+
+  // Pembatalan dirakit manual, bukan AbortSignal.any(), karena komputer
+  // sekolah sering memakai browser versi lama yang belum mendukungnya.
+  const kontrol = new AbortController();
+  let habisWaktu = false;
+  const pewaktu = setTimeout(() => {
+    habisWaktu = true;
+    kontrol.abort();
+  }, BATAS_WAKTU_MS);
+
+  const teruskanPembatalan = () => kontrol.abort();
+  if (signal?.aborted) kontrol.abort();
+  else signal?.addEventListener('abort', teruskanPembatalan, { once: true });
 
   let res;
   try {
     res = await fetch(`${BASE_URL}${path}`, {
       method: metode,
-      signal,
+      signal: kontrol.signal,
       headers: {
         ...(data !== undefined ? { 'Content-Type': 'application/json' } : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -30,6 +49,12 @@ async function permintaan(path, { metode = 'GET', data, signal } = {}) {
       body: data !== undefined ? JSON.stringify(data) : undefined,
     });
   } catch (err) {
+    if (habisWaktu) {
+      throw new GalatApi(
+        'Server terlalu lama merespons. Kemungkinan koneksi internet sedang bermasalah — coba lagi sebentar lagi.',
+        0
+      );
+    }
     // Permintaan yang sengaja dibatalkan (komponen unmount / kata kunci
     // berubah) bukan kesalahan — biarkan pemanggilnya mengabaikannya.
     if (err.name === 'AbortError') throw err;
@@ -37,6 +62,9 @@ async function permintaan(path, { metode = 'GET', data, signal } = {}) {
       'Tidak bisa menghubungi server. Periksa koneksi internet, atau pastikan backend sedang berjalan.',
       0
     );
+  } finally {
+    clearTimeout(pewaktu);
+    signal?.removeEventListener('abort', teruskanPembatalan);
   }
 
   const isJson = res.headers.get('content-type')?.includes('application/json');

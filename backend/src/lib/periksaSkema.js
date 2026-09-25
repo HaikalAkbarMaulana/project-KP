@@ -1,7 +1,8 @@
 import { supabaseAdmin } from '../supabaseClient.js';
+import { karenaDatabaseTakTerjangkau } from './galat.js';
 
 /**
- * Memastikan database sudah memakai skema v2.
+ * Memastikan database terjangkau dan sudah memakai skema v2.
  *
  * Backend v2 menanyakan kolom yang belum ada di skema lama (profil.aktif,
  * alat.jumlah_baik, peminjaman.nama_peminjam). Tanpa pemeriksaan ini,
@@ -19,7 +20,10 @@ export const PESAN_SKEMA_LAMA =
   'Database masih memakai skema lama. Jalankan database/migrasi/001-admin-saja.sql ' +
   'lalu database/schema.sql di Supabase SQL Editor.';
 
-let hasilTerakhir = { siap: true, kurang: [] };
+// Sebelum pemeriksaan pertama selesai, statusnya "belum diketahui" — bukan
+// "siap". Menganggapnya siap sejak awal membuat /api/health melaporkan
+// semuanya baik justru saat database sama sekali tidak terjangkau.
+let hasilTerakhir = { diperiksa: false, terjangkau: null, siap: false, kurang: [] };
 
 export const statusSkema = () => hasilTerakhir;
 
@@ -31,14 +35,22 @@ export async function periksaSkema() {
 
   for (const { tabel, kolom } of KOLOM_WAJIB) {
     const { error } = await supabaseAdmin.from(tabel).select(kolom).limit(1);
-    if (karenaKolomHilang(error)) kurang.push(`${tabel}.${kolom}`);
-    else if (error) {
-      // Masalah lain (jaringan, izin) bukan urusan pemeriksaan ini.
-      console.warn(`Tidak bisa memeriksa ${tabel}.${kolom}: ${error.message}`);
+
+    if (karenaDatabaseTakTerjangkau(error)) {
+      hasilTerakhir = { diperiksa: true, terjangkau: false, siap: false, kurang: [] };
+      console.warn(
+        '\n⚠  Supabase tidak bisa dihubungi dari komputer ini.\n' +
+        '   Periksa koneksi internet. Aplikasi akan tetap menyala, tapi data\n' +
+        '   tidak bisa dimuat sampai koneksinya pulih.\n'
+      );
+      return hasilTerakhir;
     }
+
+    if (karenaKolomHilang(error)) kurang.push(`${tabel}.${kolom}`);
+    else if (error) console.warn(`Tidak bisa memeriksa ${tabel}.${kolom}: ${error.message}`);
   }
 
-  hasilTerakhir = { siap: kurang.length === 0, kurang };
+  hasilTerakhir = { diperiksa: true, terjangkau: true, siap: kurang.length === 0, kurang };
 
   if (!hasilTerakhir.siap) {
     console.warn(

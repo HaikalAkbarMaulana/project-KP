@@ -14,6 +14,35 @@ export class GalatAplikasi extends Error {
   }
 }
 
+export const PESAN_DATABASE_TAK_TERJANGKAU =
+  'Server tidak bisa menghubungi database (Supabase). Periksa koneksi internet ' +
+  'komputer yang menjalankan backend, lalu coba lagi.';
+
+const RE_GANGGUAN_JARINGAN =
+  /fetch failed|TimeoutError|AbortError|ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|UND_ERR/i;
+
+/**
+ * Apakah kegagalan ini karena Supabase tidak terjangkau, bukan karena
+ * datanya ditolak database.
+ *
+ * Supabase JS tidak melempar error jaringan, melainkan mengembalikannya
+ * sebagai objek `error` biasa — bentuknya mirip error database, hanya
+ * pesannya yang berbeda. Error dari PostgreSQL selalu membawa kode
+ * SQLSTATE lima karakter (atau kode PGRST), jadi yang punya kode seperti
+ * itu jelas bukan gangguan jaringan meskipun pesannya kebetulan memuat
+ * kata "aborted".
+ */
+export function karenaDatabaseTakTerjangkau(error) {
+  if (!error) return false;
+  if (error.name === 'AuthRetryableFetchError') return true;
+  if (typeof error.code === 'string' && /^([0-9A-Z]{5}|PGRST\w*)$/.test(error.code)) return false;
+
+  const teks = [error.name, error.message, error.code, error.details, error.cause?.code]
+    .filter(Boolean)
+    .join(' ');
+  return RE_GANGGUAN_JARINGAN.test(teks);
+}
+
 export const galatValidasi = (pesan) => new GalatAplikasi(pesan, 400);
 export const galatTidakDitemukan = (pesan = 'Data tidak ditemukan.') => new GalatAplikasi(pesan, 404);
 export const galatKonflik = (pesan) => new GalatAplikasi(pesan, 409);

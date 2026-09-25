@@ -126,7 +126,7 @@ export default function DataAlat() {
 
       <PesanGalat pesan={galat} onCobaLagi={muatUlang} />
 
-      {memuat ? (
+      {galat ? null : memuat ? (
         <Memuat />
       ) : daftarAlat.length === 0 ? (
         <Kosong

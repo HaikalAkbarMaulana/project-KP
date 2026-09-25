@@ -117,7 +117,7 @@ export default function Beranda() {
 
         <PesanGalat pesan={galat} onCobaLagi={muatUlang} />
 
-        {memuat ? (
+        {galat ? null : memuat ? (
           <Memuat pesan="Memuat katalog alat..." />
         ) : daftarAlat.length === 0 ? (
           <Kosong

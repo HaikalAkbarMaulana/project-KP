@@ -5,7 +5,12 @@ import morgan from 'morgan';
 import dotenv from 'dotenv';
 
 import { pembatasLaju } from './middleware/pembatasLaju.js';
-import { terjemahkanGalatDatabase } from './lib/galat.js';
+import {
+  GalatAplikasi,
+  terjemahkanGalatDatabase,
+  karenaDatabaseTakTerjangkau,
+  PESAN_DATABASE_TAK_TERJANGKAU,
+} from './lib/galat.js';
 import { periksaSkema, statusSkema } from './lib/periksaSkema.js';
 
 import alatRoutes from './routes/alat.js';
@@ -45,12 +50,30 @@ const originDiizinkan = (process.env.FRONTEND_ORIGIN || 'http://localhost:5173')
   .map((o) => o.trim())
   .filter(Boolean);
 
+// Saat pengembangan, frontend bisa dibuka lewat "localhost" maupun
+// "127.0.0.1" — bagi browser keduanya origin yang berbeda. Vite sengaja
+// dipasang di 127.0.0.1 (lihat frontend/vite.config.js), sementara .env
+// lama biasanya hanya mencantumkan localhost. Tanpa baris ini halaman bisa
+// terbuka tapi seluruh datanya ditolak CORS.
+if (!modeProduksi) {
+  for (const o of ['http://localhost:5173', 'http://127.0.0.1:5173']) {
+    if (!originDiizinkan.includes(o)) originDiizinkan.push(o);
+  }
+}
+
 app.use(cors({
   origin(origin, callback) {
     // Permintaan tanpa header Origin (curl, aplikasi mobile, health check)
     // tidak berisiko CSRF karena API ini memakai token Bearer, bukan cookie.
     if (!origin || originDiizinkan.includes(origin)) return callback(null, true);
-    callback(new Error(`Origin ${origin} tidak diizinkan.`));
+
+    // Dilaporkan sebagai 403 dengan pesan jelas. Sebelumnya penolakan ini
+    // jatuh ke "Terjadi kesalahan pada server" yang tidak memberi petunjuk.
+    console.warn(`CORS menolak origin ${origin}. Tambahkan ke FRONTEND_ORIGIN di backend/.env bila memang sah.`);
+    callback(new GalatAplikasi(
+      `Alamat ${origin} belum diizinkan mengakses API. Tambahkan ke FRONTEND_ORIGIN di backend/.env.`,
+      403
+    ));
   },
 }));
 
@@ -66,10 +89,15 @@ app.get('/api/health', async (req, res, next) => {
     // migrasinya selesai. Setelah siap, cukup pakai hasil yang tersimpan.
     const skema = statusSkema().siap ? statusSkema() : await periksaSkema();
 
+    let keteranganSkema = 'siap';
+    if (!skema.terjangkau) keteranganSkema = 'tidak bisa diperiksa';
+    else if (!skema.siap) keteranganSkema = { status: 'perlu migrasi', kolom_hilang: skema.kurang };
+
     res.json({
       status: 'ok',
       waktu: new Date().toISOString(),
-      skema: skema.siap ? 'siap' : { status: 'perlu migrasi', kolom_hilang: skema.kurang },
+      database: skema.terjangkau ? 'terhubung' : 'tidak terjangkau',
+      skema: keteranganSkema,
     });
   } catch (err) {
     next(err);
@@ -95,6 +123,15 @@ app.use((req, res) => {
 // dan dibalas dengan pesan umum, supaya struktur database tidak bocor.
 // ------------------------------------------------------------
 app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
+  // Gangguan koneksi ke Supabase dilaporkan apa adanya (503), bukan sebagai
+  // "kesalahan server" umum. Penyebabnya di luar aplikasi — biasanya
+  // internet komputer server — dan petugas lab perlu tahu itu untuk bisa
+  // bertindak, alih-alih mengira aplikasinya rusak.
+  if (karenaDatabaseTakTerjangkau(err)) {
+    console.warn(`[${req.method} ${req.originalUrl}] Supabase tidak terjangkau: ${err.message}`);
+    return res.status(503).json({ pesan: PESAN_DATABASE_TAK_TERJANGKAU });
+  }
+
   const terjemahan = terjemahkanGalatDatabase(err);
   const galat = terjemahan || err;
 

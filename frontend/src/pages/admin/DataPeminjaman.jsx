@@ -158,7 +158,7 @@ export default function DataPeminjaman() {
 
       <PesanGalat pesan={galat} onCobaLagi={muatUlang} />
 
-      {memuat ? (
+      {galat ? null : memuat ? (
         <Memuat />
       ) : daftar.length === 0 ? (
         <Kosong
