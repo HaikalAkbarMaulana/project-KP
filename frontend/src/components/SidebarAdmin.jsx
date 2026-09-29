@@ -36,9 +36,7 @@ export default function SidebarAdmin({ terbuka, onTutup }) {
       >
         <div className="flex items-center justify-between gap-3 px-6 py-6">
           <div className="flex items-center gap-3">
-            {/* Lambang diberi alas putih agar tepiannya tetap terbaca di
-                atas sidebar yang gelap. */}
-            <LogoSekolah ukuran={40} kelas="h-10 w-10 rounded-xl bg-white/95 p-1" />
+            <LogoSekolah ukuran={40} kelas="h-10 w-10" />
             <div>
               <p className="font-display text-sm font-bold leading-tight text-white">LabPinjam</p>
               <p className="text-xs text-slate-400">SMP Negeri 3 Kedungreja</p>
