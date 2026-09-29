@@ -4,18 +4,30 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Palet utama: teal + slate gelap (beda dari referensi yang ungu/pink/gold)
+        // Palet utama diturunkan dari lambang SMP Negeri 3 Kedungreja:
+        // hijau daun #70c060 dan hijau tua karangan #308050.
+        //
+        // Nilai 500 sengaja dibuat cukup gelap (kontras 5.0 terhadap putih)
+        // karena dipakai sebagai warna dasar tombol bertulisan putih. Teal
+        // yang dipakai sebelumnya hanya 3.0 — di bawah ambang keterbacaan
+        // 4.5 yang dianjurkan, dan terasa pucat di layar proyektor kelas.
         brand: {
-          50: '#effcf6',
-          100: '#c9f7e5',
-          200: '#94efcd',
-          300: '#5fe0b7',
-          400: '#2ec89e',
-          500: '#12a884',
-          600: '#0a8b6d',
-          700: '#0a6f59',
-          800: '#0c5949',
-          900: '#0d4a3d',
+          50: '#f0f9ef',
+          100: '#dcf1d9',
+          200: '#b8e3b3',
+          300: '#8ace83',
+          400: '#55b04f',
+          500: '#24802f',
+          600: '#1d6a27',
+          700: '#185621',
+          800: '#14451b',
+          900: '#113a18',
+        },
+        // Emas medali pada lambang, untuk aksen sesekali.
+        emas: {
+          100: '#f5ecd8',
+          500: '#b09060',
+          700: '#836a44',
         },
         ink: {
           900: '#0b1220',

@@ -40,6 +40,8 @@ export default function Beranda() {
   const { data, memuat, galat, muatUlang } = useAmbilData(pathAlat);
   const daftarAlat = data?.data ?? [];
   const total = data?.halaman?.total ?? 0;
+  const jumlahRuangan = ruangan.data?.data?.length ?? 0;
+  const jumlahKategori = kategori.data?.data?.length ?? 0;
   const totalHalaman = Math.max(Math.ceil(total / PER_HALAMAN), 1);
 
   /** Setiap perubahan filter mengembalikan tampilan ke halaman pertama. */
@@ -71,6 +73,16 @@ export default function Beranda() {
               Bapak/Ibu guru bisa langsung mengajukan peminjaman dari halaman ini —
               tanpa perlu membuat akun. Petugas lab yang akan meninjau pengajuannya.
             </p>
+
+            {/* Ringkasan isi katalog. Baru ditampilkan setelah datanya tiba
+                agar tidak sempat terbaca "0 jenis alat" saat masih memuat. */}
+            {total > 0 && (
+              <dl className="mt-6 flex flex-wrap gap-x-8 gap-y-3">
+                <Ringkasan angkaTampil={angka(total)} label="jenis alat" />
+                <Ringkasan angkaTampil={angka(jumlahRuangan)} label="ruangan" />
+                <Ringkasan angkaTampil={angka(jumlahKategori)} label="kategori" />
+              </dl>
+            )}
           </div>
 
           {/* Disembunyikan di layar sempit: di sana ruangnya lebih berguna
@@ -164,13 +176,26 @@ export default function Beranda() {
   );
 }
 
+/** Satu angka ringkasan di bagian sambutan. */
+function Ringkasan({ angkaTampil, label }) {
+  return (
+    <div>
+      <dt className="sr-only">{label}</dt>
+      <dd>
+        <span className="font-display text-2xl font-bold text-white">{angkaTampil}</span>
+        <span className="ml-1.5 text-sm text-slate-400">{label}</span>
+      </dd>
+    </div>
+  );
+}
+
 function KartuAlat({ alat }) {
   const tersedia = alat.jumlah_tersedia > 0 && alat.boleh_dipinjam;
 
   return (
     <Link
       to={`/alat/${alat.id}`}
-      className="group flex flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md"
+      className="group flex flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-brand-200 hover:shadow-lg hover:shadow-brand-900/5 focus-visible:-translate-y-1"
     >
       <div className="mb-4 flex h-32 items-center justify-center overflow-hidden rounded-xl bg-brand-50">
         {alat.foto_url ? (
@@ -178,10 +203,13 @@ function KartuAlat({ alat }) {
             src={alat.foto_url}
             alt={alat.nama_alat}
             loading="lazy"
-            className="h-full w-full object-cover"
+            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
           />
         ) : (
-          <PackageSearch size={36} className="text-brand-400" />
+          <PackageSearch
+            size={36}
+            className="text-brand-400 transition-transform duration-300 group-hover:scale-110"
+          />
         )}
       </div>
 

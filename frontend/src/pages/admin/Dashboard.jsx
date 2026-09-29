@@ -4,7 +4,7 @@ import {
   PieChart, Pie, Cell, Legend,
 } from 'recharts';
 import {
-  Boxes, PackageCheck, Wrench, Wallet, Activity, AlertTriangle, Clock, ArrowRight,
+  Boxes, PackageCheck, Wrench, Wallet, Activity, AlertTriangle, Clock, ArrowRight, CalendarRange,
 } from 'lucide-react';
 
 import StatCard from '../../components/StatCard';
@@ -12,7 +12,45 @@ import { useAmbilData } from '../../hooks/useAmbilData';
 import { Memuat, PesanGalat, Kosong } from '../../components/Keadaan';
 import { angka, rupiah, waktuLengkap } from '../../lib/format';
 
-const WARNA_KONDISI = ['#12a884', '#f59e0b'];
+// Diambil dari palet brand di tailwind.config.js. Recharts menggambar ke
+// SVG dengan warna harfiah, jadi nilainya tidak bisa memakai kelas Tailwind.
+const HIJAU = '#24802f';
+const AMBER = '#d97706';
+const ABU_GARIS = '#e2e8f0';
+const ABU_TEKS = '#94a3b8';
+
+const WARNA_KONDISI = [HIJAU, AMBER];
+
+const GAYA_TOOLTIP = {
+  borderRadius: 12,
+  border: `1px solid ${ABU_GARIS}`,
+  fontSize: 13,
+  boxShadow: '0 4px 12px rgb(15 23 42 / 0.08)',
+};
+
+/**
+ * Membandingkan jumlah peminjaman bulan ini dengan bulan sebelumnya.
+ *
+ * Hanya angka inilah yang punya pembanding sungguhan — data bulanan memang
+ * disimpan. Kartu lain seperti unit rusak tidak diberi tren karena
+ * aplikasi tidak menyimpan potret stok harian.
+ */
+function hitungTren(perBulan) {
+  if (!perBulan || perBulan.length < 2) return null;
+
+  const iniBulan = perBulan[perBulan.length - 1].jumlah;
+  const bulanLalu = perBulan[perBulan.length - 2].jumlah;
+  const selisih = iniBulan - bulanLalu;
+
+  if (selisih === 0) {
+    return { arah: 'sama', nilai: 'tetap', keterangan: `Sama dengan bulan lalu (${bulanLalu})` };
+  }
+  return {
+    arah: selisih > 0 ? 'naik' : 'turun',
+    nilai: `${selisih > 0 ? '+' : ''}${selisih}`,
+    keterangan: `Bulan lalu ${bulanLalu} pengajuan`,
+  };
+}
 
 export default function Dashboard() {
   const { data, memuat, galat, muatUlang } = useAmbilData('/dashboard/ringkasan');
@@ -21,6 +59,8 @@ export default function Dashboard() {
   if (galat) return <PesanGalat pesan={galat} onCobaLagi={muatUlang} />;
 
   const r = data.data;
+  const tren = hitungTren(r.peminjamanPerBulan);
+  const peminjamanBulanIni = r.peminjamanPerBulan?.at(-1)?.jumlah ?? 0;
 
   return (
     <div className="space-y-6">
@@ -47,7 +87,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <StatCard
           ikon={Boxes} label="Jenis alat" nilai={angka(r.totalJenisAlat)}
           catatan={`${angka(r.totalUnit)} unit seluruhnya`} warna="brand"
@@ -55,6 +95,13 @@ export default function Dashboard() {
         <StatCard
           ikon={PackageCheck} label="Siap dipinjam" nilai={angka(r.unitTersedia)} satuan="unit"
           catatan={`${angka(r.unitDipinjam)} unit sedang dipinjam`} warna="sky"
+        />
+        <StatCard
+          ikon={CalendarRange} label="Pengajuan bulan ini"
+          nilai={angka(peminjamanBulanIni)}
+          tren={tren}
+          catatan="Belum ada pembanding bulan lalu"
+          warna="brand"
         />
         <StatCard
           ikon={Wrench} label="Unit rusak" nilai={angka(r.unitRusak)} satuan="unit"
@@ -70,15 +117,22 @@ export default function Dashboard() {
         <Panel judul="Peminjaman 6 bulan terakhir" kelas="lg:col-span-2">
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={r.peminjamanPerBulan} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-              <XAxis dataKey="nama" tick={{ fontSize: 12 }} stroke="#94a3b8" tickLine={false} />
-              <YAxis allowDecimals={false} stroke="#94a3b8" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
+              <defs>
+                {/* Gradasi tipis agar batang tidak terlihat sebagai blok datar. */}
+                <linearGradient id="gradasiBatang" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={HIJAU} />
+                  <stop offset="100%" stopColor={HIJAU} stopOpacity={0.7} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke={ABU_GARIS} vertical={false} />
+              <XAxis dataKey="nama" tick={{ fontSize: 12 }} stroke={ABU_TEKS} tickLine={false} axisLine={false} />
+              <YAxis allowDecimals={false} stroke={ABU_TEKS} tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
               <Tooltip
-                cursor={{ fill: '#f1f5f9' }}
+                cursor={{ fill: 'rgb(36 128 47 / 0.06)' }}
                 formatter={(nilai) => [`${nilai} pengajuan`, '']}
-                contentStyle={{ borderRadius: 12, border: '1px solid #e2e8f0', fontSize: 13 }}
+                contentStyle={GAYA_TOOLTIP}
               />
-              <Bar dataKey="jumlah" fill="#12a884" radius={[6, 6, 0, 0]} maxBarSize={48} />
+              <Bar dataKey="jumlah" fill="url(#gradasiBatang)" radius={[6, 6, 0, 0]} maxBarSize={48} />
             </BarChart>
           </ResponsiveContainer>
         </Panel>
@@ -91,7 +145,7 @@ export default function Dashboard() {
               <PieChart>
                 <Pie
                   data={r.kondisiUnit} dataKey="jumlah" nameKey="nama"
-                  innerRadius={55} outerRadius={85} paddingAngle={2}
+                  innerRadius={58} outerRadius={88} paddingAngle={3} stroke="#ffffff" strokeWidth={2}
                 >
                   {r.kondisiUnit.map((entri, i) => (
                     <Cell key={entri.nama} fill={WARNA_KONDISI[i % WARNA_KONDISI.length]} />
@@ -100,7 +154,7 @@ export default function Dashboard() {
                 <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{ fontSize: 13 }} />
                 <Tooltip
                   formatter={(nilai, nama) => [`${angka(nilai)} unit`, nama]}
-                  contentStyle={{ borderRadius: 12, border: '1px solid #e2e8f0', fontSize: 13 }}
+                  contentStyle={GAYA_TOOLTIP}
                 />
               </PieChart>
             </ResponsiveContainer>
