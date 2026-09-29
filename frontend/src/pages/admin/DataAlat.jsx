@@ -5,8 +5,10 @@ import { api, keQuery } from '../../lib/api';
 import { useAmbilData } from '../../hooks/useAmbilData';
 import { useTundaNilai } from '../../hooks/useTundaNilai';
 import { angka, rupiah, SUMBER_DANA } from '../../lib/format';
+import { hapusFotoAlat } from '../../lib/penyimpanan';
 import Modal from '../../components/Modal';
 import KonfirmasiHapus from '../../components/KonfirmasiHapus';
+import UnggahFoto from '../../components/UnggahFoto';
 import { Memuat, PesanGalat, Kosong } from '../../components/Keadaan';
 
 const PER_HALAMAN = 25;
@@ -266,6 +268,10 @@ function FormAlat({ terbuka, alat, kategori, ruangan, onTutup, onSimpan }) {
   const [menyimpan, setMenyimpan] = useState(false);
   const [idTerakhir, setIdTerakhir] = useState(null);
 
+  // Foto yang sudah tersimpan di database saat formulir dibuka. Dipakai
+  // membedakan mana unggahan baru yang boleh dibuang saat dibatalkan.
+  const [fotoAwal, setFotoAwal] = useState('');
+
   // Isian disamakan dengan baris yang sedang dibuka tanpa perlu efek
   // tambahan: cukup bandingkan penanda barisnya saat render.
   const penanda = terbuka ? (alat?.id ?? 'baru') : null;
@@ -273,6 +279,7 @@ function FormAlat({ terbuka, alat, kategori, ruangan, onTutup, onSimpan }) {
     setIdTerakhir(penanda);
     setGalat('');
     setForm(alat ? keIsianForm(alat) : FORM_KOSONG);
+    setFotoAwal(alat?.foto_url || '');
   }
 
   function ubah(kunci) {
@@ -280,6 +287,23 @@ function FormAlat({ terbuka, alat, kategori, ruangan, onTutup, onSimpan }) {
       const nilai = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
       setForm((f) => ({ ...f, [kunci]: nilai }));
     };
+  }
+
+  /**
+   * Foto sudah terunggah sebelum formulir disimpan, jadi berkas yang batal
+   * dipakai dibersihkan di sini. Yang boleh dihapus hanya unggahan baru —
+   * foto yang sudah tersimpan di database baru dilepas setelah penyimpanan
+   * berhasil, supaya data lama tidak hilang kalau penyimpanan gagal.
+   */
+  function gantiFoto(urlBaru) {
+    const sebelumnya = form.foto_url;
+    if (sebelumnya && sebelumnya !== fotoAwal) hapusFotoAlat(sebelumnya);
+    setForm((f) => ({ ...f, foto_url: urlBaru || '' }));
+  }
+
+  function batal() {
+    if (form.foto_url && form.foto_url !== fotoAwal) hapusFotoAlat(form.foto_url);
+    onTutup();
   }
 
   async function simpan(e) {
@@ -298,6 +322,10 @@ function FormAlat({ terbuka, alat, kategori, ruangan, onTutup, onSimpan }) {
     try {
       if (alat) await api.put(`/alat/${alat.id}`, payload);
       else await api.post('/alat', payload);
+
+      // Foto lama baru dilepas setelah data tersimpan.
+      if (fotoAwal && fotoAwal !== form.foto_url) hapusFotoAlat(fotoAwal);
+
       onSimpan();
     } catch (err) {
       setGalat(err.message);
@@ -312,7 +340,7 @@ function FormAlat({ terbuka, alat, kategori, ruangan, onTutup, onSimpan }) {
     <Modal
       terbuka={terbuka}
       judul={alat ? `Edit ${alat.nama_alat}` : 'Tambah Alat'}
-      onTutup={onTutup}
+      onTutup={batal}
       lebar="max-w-2xl"
     >
       <form onSubmit={simpan} className="space-y-4">
@@ -415,6 +443,8 @@ function FormAlat({ terbuka, alat, kategori, ruangan, onTutup, onSimpan }) {
           </div>
         </fieldset>
 
+        <UnggahFoto nilai={form.foto_url} onChange={gantiFoto} mati={menyimpan} />
+
         <Isian label="Keterangan">
           <textarea
             rows={2} maxLength={2000} value={form.deskripsi} onChange={ubah('deskripsi')}
@@ -437,7 +467,7 @@ function FormAlat({ terbuka, alat, kategori, ruangan, onTutup, onSimpan }) {
 
         <div className="flex justify-end gap-2 pt-2">
           <button
-            type="button" onClick={onTutup}
+            type="button" onClick={batal}
             className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100"
           >
             Batal

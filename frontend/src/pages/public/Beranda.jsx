@@ -7,6 +7,7 @@ import { useTundaNilai } from '../../hooks/useTundaNilai';
 import { keQuery } from '../../lib/api';
 import { angka } from '../../lib/format';
 import { Memuat, PesanGalat, Kosong } from '../../components/Keadaan';
+import LogoSekolah from '../../components/LogoSekolah';
 
 const PER_HALAMAN = 24;
 
@@ -51,18 +52,30 @@ export default function Beranda() {
 
   return (
     <div>
-      <section className="border-b border-slate-200 bg-gradient-to-br from-ink-900 to-ink-800 py-12 text-white sm:py-16">
-        <div className="mx-auto max-w-6xl px-6">
-          <p className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-brand-200">
-            <Beaker size={14} /> Lab Komputer & IPA
-          </p>
-          <h1 className="font-display max-w-xl text-2xl font-bold leading-tight sm:text-4xl">
-            Cek ketersediaan alat lab, lalu ajukan peminjaman
-          </h1>
-          <p className="mt-3 max-w-lg text-sm text-slate-300 sm:text-base">
-            Bapak/Ibu guru bisa langsung mengajukan peminjaman dari halaman ini —
-            tanpa perlu membuat akun. Petugas lab yang akan meninjau pengajuannya.
-          </p>
+      <section className="relative overflow-hidden border-b border-slate-200 bg-gradient-to-br from-ink-900 via-ink-800 to-ink-900 py-12 text-white sm:py-16">
+        {/* Semburat warna lembut agar latar gelapnya tidak terasa rata. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-brand-500/20 blur-3xl"
+        />
+
+        <div className="relative mx-auto flex max-w-6xl items-center gap-10 px-6">
+          <div className="min-w-0 flex-1">
+            <p className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-brand-200 ring-1 ring-white/10">
+              <Beaker size={14} /> Lab Komputer &amp; IPA
+            </p>
+            <h1 className="font-display max-w-xl text-2xl font-bold leading-tight sm:text-4xl">
+              Cek ketersediaan alat lab, lalu ajukan peminjaman
+            </h1>
+            <p className="mt-3 max-w-lg text-sm text-slate-300 sm:text-base">
+              Bapak/Ibu guru bisa langsung mengajukan peminjaman dari halaman ini —
+              tanpa perlu membuat akun. Petugas lab yang akan meninjau pengajuannya.
+            </p>
+          </div>
+
+          {/* Disembunyikan di layar sempit: di sana ruangnya lebih berguna
+              untuk tulisan, dan lambangnya sudah tampil di header. */}
+          <LogoSekolah ukuran={176} kelas="hidden h-36 w-36 drop-shadow-2xl lg:block xl:h-44 xl:w-44" />
         </div>
       </section>
 

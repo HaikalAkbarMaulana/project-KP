@@ -61,11 +61,29 @@ if (!modeProduksi) {
   }
 }
 
+// Alamat jaringan lokal: 192.168.x.x, 10.x.x.x, dan 172.16-31.x.x.
+const RE_JARINGAN_LOKAL =
+  /^https?:\/\/(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(?::\d+)?$/;
+
+/**
+ * Saat pengembangan, alamat jaringan lokal ikut diizinkan supaya aplikasi
+ * bisa dibuka dari HP yang tersambung ke Wi-Fi yang sama. Alamat seperti
+ * itu tidak bisa dijangkau dari internet, jadi hanya perangkat di jaringan
+ * yang sama yang terpengaruh.
+ *
+ * Di mode produksi aturan ini mati total: yang berlaku hanya daftar di
+ * FRONTEND_ORIGIN.
+ */
+function bolehAkses(origin) {
+  if (originDiizinkan.includes(origin)) return true;
+  return !modeProduksi && RE_JARINGAN_LOKAL.test(origin);
+}
+
 app.use(cors({
   origin(origin, callback) {
     // Permintaan tanpa header Origin (curl, aplikasi mobile, health check)
     // tidak berisiko CSRF karena API ini memakai token Bearer, bukan cookie.
-    if (!origin || originDiizinkan.includes(origin)) return callback(null, true);
+    if (!origin || bolehAkses(origin)) return callback(null, true);
 
     // Dilaporkan sebagai 403 dengan pesan jelas. Sebelumnya penolakan ini
     // jatuh ke "Terjadi kesalahan pada server" yang tidak memberi petunjuk.

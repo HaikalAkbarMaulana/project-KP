@@ -155,7 +155,17 @@ router.delete('/pengguna/:id', wajibAdmin, async (req, res, next) => {
 
     // Baris profil ikut terhapus lewat "on delete cascade" dari auth.users.
     const { error } = await supabaseAdmin.auth.admin.deleteUser(id);
-    if (error) throw galatValidasi(`Gagal menghapus akun: ${error.message}`);
+    if (error) {
+      // Supabase membalas "Database error deleting user" untuk segala
+      // kegagalan di sisi database, tanpa menyebut sebabnya. Pesan aslinya
+      // hanya ada di log, jadi arahkan ke sana daripada membuat petugas
+      // menebak-nebak.
+      const kabur = /database error/i.test(error.message || '');
+      throw galatValidasi(
+        `Gagal menghapus akun: ${error.message}` +
+        (kabur ? '. Penyebab rincinya ada di Supabase Dashboard → Logs → Auth.' : '')
+      );
+    }
 
     await catatAktivitas({
       admin: req.admin,

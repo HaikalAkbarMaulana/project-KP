@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { supabaseAdmin } from '../supabaseClient.js';
 import { wajibAdmin, kenaliAdmin } from '../middleware/auth.js';
 import { catatAktivitas } from '../lib/log.js';
+import { hapusFotoAlat } from '../lib/penyimpanan.js';
 import { galatTidakDitemukan, galatValidasi, galatKonflik } from '../lib/galat.js';
 import * as v from '../lib/validasi.js';
 
@@ -214,7 +215,7 @@ router.delete('/:id', wajibAdmin, async (req, res, next) => {
 
     const { data: alat, error: errAmbil } = await supabaseAdmin
       .from('alat')
-      .select('nama_alat, jumlah_dipinjam')
+      .select('nama_alat, jumlah_dipinjam, foto_url')
       .eq('id', id)
       .maybeSingle();
 
@@ -240,6 +241,9 @@ router.delete('/:id', wajibAdmin, async (req, res, next) => {
       }
       throw error;
     }
+
+    // Fotonya ikut dibuang agar tidak menumpuk sebagai berkas tanpa pemilik.
+    await hapusFotoAlat(alat.foto_url);
 
     await catatAktivitas({
       admin: req.admin,

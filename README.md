@@ -152,6 +152,16 @@ Frontend berjalan di `http://127.0.0.1:5173`. Masuk sebagai admin lewat
 - **Data Inventaris** — CRUD alat beserta kolom administrasi Buku Inventaris Barang
   (merk/tipe, nomor seri, tahun perolehan, sumber dana, harga satuan). Alat yang
   tidak dipinjamkan keluar bisa ditandai lewat sakelar *boleh dipinjam*.
+- **Foto alat** — diunggah langsung dari formulir tambah/edit alat ke Supabase
+  Storage, lalu tampil di katalog dan halaman detail. Maksimal 2 MB, format JPG,
+  PNG, atau WEBP. Batas itu dipasang di tingkat bucket sehingga dipaksakan
+  Supabase, bukan sekadar diperiksa di browser. Foto lama dibersihkan otomatis
+  saat diganti atau saat alatnya dihapus.
+- **Hapus data peminjaman** — untuk kiriman iseng, dobel, atau salah isi. Form
+  pengajuan terbuka untuk umum, jadi data semacam itu pasti muncul. Tombolnya
+  terkunci selama pengajuan masih menahan stok (status *disetujui* atau
+  *dipinjam*): menghapusnya akan melepas stok padahal alatnya masih di tangan
+  guru. Catat pengembaliannya atau batalkan dulu.
 - **Peminjaman** — tinjau, setujui/tolak dengan catatan, tandai diambil, catat
   pengembalian. Ada penyaring khusus untuk yang terlambat, dan nomor HP guru bisa
   langsung ditelepon.
@@ -206,8 +216,6 @@ select public.hitung_ulang_stok();
 
 ## Yang Belum Dibuat
 
-- **Upload foto alat** — kolom `foto_url` sudah ada dan katalog sudah menampilkannya
-  bila diisi; tinggal menambahkan Supabase Storage + komponen unggah.
 - **Notifikasi WhatsApp/email** saat pengajuan diproses.
 - **Ekspor PDF** (CSV sudah tersedia).
 - **Ganti kata sandi sendiri** dari dalam panel — saat ini lewat Supabase Dashboard.

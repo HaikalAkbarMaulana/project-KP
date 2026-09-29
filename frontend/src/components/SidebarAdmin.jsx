@@ -1,7 +1,8 @@
 import { NavLink } from 'react-router-dom';
 import {
-  LayoutGrid, Boxes, ClipboardList, DoorOpen, Tags, Users, LogOut, FlaskConical, X, ExternalLink,
+  LayoutGrid, Boxes, ClipboardList, DoorOpen, Tags, Users, LogOut, X, ExternalLink,
 } from 'lucide-react';
+import LogoSekolah from './LogoSekolah';
 import { useAuth } from '../context/AuthContext';
 
 const menu = [
@@ -35,12 +36,12 @@ export default function SidebarAdmin({ terbuka, onTutup }) {
       >
         <div className="flex items-center justify-between gap-3 px-6 py-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-500 text-white">
-              <FlaskConical size={20} />
-            </div>
+            {/* Lambang diberi alas putih agar tepiannya tetap terbaca di
+                atas sidebar yang gelap. */}
+            <LogoSekolah ukuran={40} kelas="h-10 w-10 rounded-xl bg-white/95 p-1" />
             <div>
               <p className="font-display text-sm font-bold leading-tight text-white">LabPinjam</p>
-              <p className="text-xs text-slate-400">SMPN 3 Kedungreja</p>
+              <p className="text-xs text-slate-400">SMP Negeri 3 Kedungreja</p>
             </div>
           </div>
           <button

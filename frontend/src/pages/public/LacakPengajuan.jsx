@@ -4,7 +4,8 @@ import { Search, Clock, CheckCircle2, XCircle, PackageOpen, PackageCheck, Ban } 
 
 import { api } from '../../lib/api';
 import { STATUS_LABEL, STATUS_WARNA, tanggalSingkat, sisaHari } from '../../lib/format';
-import { PesanGalat } from '../../components/Keadaan';
+import { PesanGalat, PesanSukses } from '../../components/Keadaan';
+import Modal from '../../components/Modal';
 
 const IKON_STATUS = {
   pending: Clock,
@@ -32,6 +33,12 @@ export default function LacakPengajuan() {
   const [hasil, setHasil] = useState(null);
   const [galat, setGalat] = useState('');
   const [mencari, setMencari] = useState(false);
+  const [dialogBatal, setDialogBatal] = useState(false);
+  const [pesanSukses, setPesanSukses] = useState('');
+
+  // Dinaikkan setelah pembatalan supaya statusnya diambil ulang dari server,
+  // bukan ditebak di sisi halaman.
+  const [penanda, setPenanda] = useState(0);
 
   // Kode yang dibawa lewat alamat (misal dari halaman "pengajuan terkirim")
   // langsung dicari begitu halaman dibuka.
@@ -52,12 +59,13 @@ export default function LacakPengajuan() {
       .finally(() => setMencari(false));
 
     return () => kontrol.abort();
-  }, [kodeAwal]);
+  }, [kodeAwal, penanda]);
 
   function cari(e) {
     e.preventDefault();
     const bersih = kode.trim().toUpperCase();
     if (!bersih) return;
+    setPesanSukses('');
     // Pencarian dijalankan lewat perubahan alamat supaya hasilnya bisa
     // dibagikan atau disimpan sebagai penanda halaman.
     setParamUrl({ kode: bersih });
@@ -90,15 +98,115 @@ export default function LacakPengajuan() {
         </button>
       </form>
 
-      <div className="mt-6">
+      <div className="mt-6 space-y-4">
         <PesanGalat pesan={galat} />
-        {hasil && <KartuHasil data={hasil} />}
+        <PesanSukses pesan={pesanSukses} />
+        {hasil && <KartuHasil data={hasil} onMintaBatal={() => setDialogBatal(true)} />}
       </div>
+
+      <DialogBatal
+        terbuka={dialogBatal}
+        data={hasil}
+        onTutup={() => setDialogBatal(false)}
+        onBerhasil={(pesan) => {
+          setDialogBatal(false);
+          setPesanSukses(pesan);
+          setPenanda((n) => n + 1);
+        }}
+      />
     </div>
   );
 }
 
-function KartuHasil({ data }) {
+/**
+ * Konfirmasi pembatalan oleh pengaju sendiri.
+ *
+ * Meminta 4 digit terakhir nomor HP, bukan sekadar menekan tombol. Kode
+ * peminjaman bisa saja terlihat orang lain — lewat pesan yang diteruskan,
+ * misalnya — dan tanpa pembuktian ini siapa pun yang memegang kode itu bisa
+ * membatalkan pengajuan milik orang lain.
+ */
+function DialogBatal({ terbuka, data, onTutup, onBerhasil }) {
+  const [digit, setDigit] = useState('');
+  const [galat, setGalat] = useState('');
+  const [mengirim, setMengirim] = useState(false);
+  const [pernahTerbuka, setPernahTerbuka] = useState(false);
+
+  if (terbuka !== pernahTerbuka) {
+    setPernahTerbuka(terbuka);
+    if (terbuka) { setDigit(''); setGalat(''); }
+  }
+
+  async function kirim(e) {
+    e.preventDefault();
+    setGalat('');
+    setMengirim(true);
+    try {
+      const res = await api.post(
+        `/peminjaman/lacak/${encodeURIComponent(data.kode_peminjaman)}/batal`,
+        { empat_digit_hp: digit }
+      );
+      onBerhasil(res.pesan || 'Pengajuan berhasil dibatalkan.');
+    } catch (err) {
+      setGalat(err.message);
+    } finally {
+      setMengirim(false);
+    }
+  }
+
+  return (
+    <Modal terbuka={terbuka} judul="Batalkan pengajuan" onTutup={onTutup} lebar="max-w-md">
+      {data && (
+        <form onSubmit={kirim} className="space-y-4">
+          <p className="text-sm text-slate-600">
+            Pengajuan <strong>{data.alat?.nama_alat}</strong> ({data.jumlah} unit) akan dibatalkan.
+            Tindakan ini tidak bisa diurungkan — bila berubah pikiran, Anda perlu mengajukan ulang.
+          </p>
+
+          <PesanGalat pesan={galat} />
+
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-slate-600">
+              4 angka terakhir nomor HP yang Anda isi saat mengajukan <span className="text-rose-500">*</span>
+            </span>
+            {/* Placeholder sengaja hanya "0000": kotaknya sempit dan
+                berspasi lebar, sehingga teks yang lebih panjang terpotong. */}
+            <input
+              required
+              inputMode="numeric"
+              autoComplete="off"
+              maxLength={4}
+              value={digit}
+              onChange={(e) => setDigit(e.target.value.replace(/\D/g, ''))}
+              placeholder="0000"
+              className="input w-32 text-center font-mono text-lg tracking-widest"
+            />
+            <span className="mt-1 block text-xs text-slate-400">
+              Dipakai untuk memastikan yang membatalkan memang Anda.
+            </span>
+          </label>
+
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              type="button" onClick={onTutup}
+              className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+            >
+              Tidak jadi
+            </button>
+            <button
+              type="submit" disabled={mengirim || digit.length !== 4}
+              className="rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+            >
+              {mengirim ? 'Memproses...' : 'Batalkan pengajuan'}
+            </button>
+          </div>
+        </form>
+      )}
+    </Modal>
+  );
+}
+
+function KartuHasil({ data, onMintaBatal }) {
   const Ikon = IKON_STATUS[data.status] || Clock;
   const sisa = sisaHari(data.tanggal_rencana_kembali);
   const terlambat = data.status === 'dipinjam' && sisa < 0;
@@ -149,6 +257,24 @@ function KartuHasil({ data }) {
         <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
           <p className="text-xs font-medium text-slate-500">Catatan petugas lab</p>
           <p className="text-sm text-ink-900">{data.catatan_admin}</p>
+        </div>
+      )}
+
+      {/* Pembatalan sendiri hanya selama belum ditinjau. Begitu petugas lab
+          menyetujui, stok sudah ditahan untuk pengajuan ini — perubahan
+          setelah itu harus lewat petugas agar stoknya ikut terurus. */}
+      {data.status === 'pending' && (
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+          <p className="text-xs text-slate-500">
+            Berubah rencana? Anda bisa membatalkan selama belum ditinjau petugas lab.
+          </p>
+          <button
+            type="button"
+            onClick={onMintaBatal}
+            className="flex items-center gap-1.5 rounded-lg border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50"
+          >
+            <Ban size={15} /> Batalkan pengajuan
+          </button>
         </div>
       )}
     </article>

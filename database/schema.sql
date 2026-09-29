@@ -196,6 +196,7 @@ create trigger trg_sentuh_peminjaman
 -- ------------------------------------------------------------
 create or replace function public.fn_sinkron_stok()
 returns trigger language plpgsql
+security definer
 set search_path = public
 as $fn$
 declare
@@ -207,6 +208,21 @@ begin
   end if;
   if (tg_op <> 'DELETE') then
     ditahan_sesudah := new.status in ('disetujui', 'dipinjam');
+  end if;
+
+  -- Keluar lebih awal bila perubahannya tidak menyangkut stok sama sekali.
+  --
+  -- Tanpa ini, mengubah kolom apa pun pada baris peminjaman tetap menulis
+  -- ke tabel alat walau hasilnya nol. Itu pernah membuat penghapusan akun
+  -- admin gagal: penghapusan mengosongkan kolom diproses_oleh, trigger ini
+  -- ikut terbangun, lalu menyentuh tabel alat — padahal layanan Auth
+  -- Supabase tidak punya izin ke sana. Fungsi ini juga SECURITY DEFINER
+  -- agar tetap berjalan apa pun peran yang memicunya.
+  if (tg_op = 'UPDATE'
+      and ditahan_sebelum = ditahan_sesudah
+      and new.jumlah = old.jumlah
+      and new.alat_id = old.alat_id) then
+    return new;
   end if;
 
   -- Lepaskan tahanan lama
@@ -356,6 +372,46 @@ create policy "peminjaman_baca_admin" on public.peminjaman for select to authent
   using (public.adalah_admin());
 create policy "log_baca_admin" on public.log_aktivitas for select to authenticated
   using (public.adalah_admin());
+
+-- ============================================================
+-- PENYIMPANAN FOTO ALAT (Supabase Storage)
+--
+-- Batas ukuran dan jenis berkas sengaja dipasang di tingkat bucket agar
+-- dipaksakan Supabase sendiri. Pemeriksaan di browser tetap ada, tapi itu
+-- hanya demi pesan yang ramah — bukan pengaman.
+-- ============================================================
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'foto-alat',
+  'foto-alat',
+  true,
+  2097152,  -- 2 MB
+  array['image/jpeg', 'image/png', 'image/webp']
+)
+on conflict (id) do update
+  set public = excluded.public,
+      file_size_limit = excluded.file_size_limit,
+      allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "foto_alat_baca_publik" on storage.objects;
+drop policy if exists "foto_alat_unggah_admin" on storage.objects;
+drop policy if exists "foto_alat_ubah_admin" on storage.objects;
+drop policy if exists "foto_alat_hapus_admin" on storage.objects;
+
+-- Foto tampil di katalog publik, jadi boleh dibaca siapa saja.
+create policy "foto_alat_baca_publik" on storage.objects for select
+  using (bucket_id = 'foto-alat');
+
+-- Hanya admin aktif yang boleh mengunggah, mengganti, dan menghapus.
+create policy "foto_alat_unggah_admin" on storage.objects for insert to authenticated
+  with check (bucket_id = 'foto-alat' and public.adalah_admin());
+
+create policy "foto_alat_ubah_admin" on storage.objects for update to authenticated
+  using (bucket_id = 'foto-alat' and public.adalah_admin())
+  with check (bucket_id = 'foto-alat' and public.adalah_admin());
+
+create policy "foto_alat_hapus_admin" on storage.objects for delete to authenticated
+  using (bucket_id = 'foto-alat' and public.adalah_admin());
 
 -- ============================================================
 -- DATA AWAL

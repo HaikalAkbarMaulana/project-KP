@@ -5,7 +5,7 @@ import { supabaseAdmin } from '../supabaseClient.js';
 import { wajibAdmin } from '../middleware/auth.js';
 import { pembatasLaju } from '../middleware/pembatasLaju.js';
 import { catatAktivitas } from '../lib/log.js';
-import { galatTidakDitemukan, galatValidasi, galatKonflik } from '../lib/galat.js';
+import { GalatAplikasi, galatTidakDitemukan, galatValidasi, galatKonflik } from '../lib/galat.js';
 import * as v from '../lib/validasi.js';
 
 const router = Router();
@@ -176,6 +176,81 @@ router.get('/lacak/:kode', batasPelacakan, async (req, res, next) => {
   }
 });
 
+// POST /api/peminjaman/lacak/:kode/batal — guru membatalkan sendiri (PUBLIK)
+//
+// Dibatasi lebih ketat daripada pelacakan biasa. Pembuktiannya 4 digit
+// terakhir nomor HP: ada 10.000 kemungkinan, dan dengan batas 10 percobaan
+// per jam menebaknya tidak masuk akal. Batas ini juga yang membuat kode
+// peminjaman saja tidak cukup untuk membatalkan milik orang lain.
+const batasPembatalan = pembatasLaju({
+  jendelaMs: 60 * 60 * 1000,
+  maks: 10,
+  pesan: 'Terlalu banyak percobaan pembatalan dari perangkat ini. Coba lagi satu jam berikutnya, atau hubungi petugas lab.',
+});
+
+router.post('/lacak/:kode/batal', batasPembatalan, async (req, res, next) => {
+  try {
+    const kode = v.teks(req.params.kode, 'Kode peminjaman', { wajib: true, maks: 40 }).toUpperCase();
+    const empatDigit = v.teks(req.body.empat_digit_hp, '4 digit terakhir nomor HP', {
+      wajib: true, maks: 4,
+    });
+
+    if (!/^\d{4}$/.test(empatDigit)) {
+      throw galatValidasi('Masukkan tepat 4 angka terakhir nomor HP yang dipakai saat mengajukan.');
+    }
+
+    const { data: pengajuan, error: errAmbil } = await supabaseAdmin
+      .from('peminjaman')
+      .select('id, status, no_hp, nama_peminjam, alat:alat_id(nama_alat)')
+      .eq('kode_peminjaman', kode)
+      .maybeSingle();
+
+    if (errAmbil) throw errAmbil;
+    if (!pengajuan) {
+      throw galatTidakDitemukan('Kode peminjaman tidak ditemukan. Periksa lagi penulisannya.');
+    }
+
+    if (pengajuan.status !== 'pending') {
+      throw galatKonflik(
+        `Pengajuan ini sudah berstatus "${pengajuan.status}" sehingga tidak bisa dibatalkan sendiri. ` +
+        'Hubungi petugas lab bila perlu diubah.'
+      );
+    }
+
+    const digitAsli = (pengajuan.no_hp || '').replace(/\D/g, '').slice(-4);
+    if (digitAsli !== empatDigit) {
+      throw new GalatAplikasi(
+        '4 digit terakhir nomor HP tidak cocok dengan yang dipakai saat mengajukan.',
+        403
+      );
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('peminjaman')
+      .update({ status: 'dibatalkan', catatan_admin: 'Dibatalkan sendiri oleh pengaju.' })
+      .eq('id', pengajuan.id)
+      // Pengaman bila petugas lab kebetulan memproses di saat bersamaan.
+      .eq('status', 'pending')
+      .select('kode_peminjaman, status')
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) {
+      throw galatKonflik('Pengajuan ini baru saja diproses petugas lab. Segarkan halaman lalu periksa lagi.');
+    }
+
+    await catatAktivitas({
+      admin: { id: null, nama: `${pengajuan.nama_peminjam} (pengaju)` },
+      aksi: LABEL_AKSI.dibatalkan,
+      keterangan: `${pengajuan.nama_peminjam} membatalkan sendiri pengajuan "${pengajuan.alat?.nama_alat}"`,
+    });
+
+    res.json({ data, pesan: 'Pengajuan berhasil dibatalkan.' });
+  } catch (err) {
+    next(err);
+  }
+});
+
 function samarkanNama(nama) {
   return nama
     .split(' ')
@@ -292,6 +367,51 @@ router.patch('/:id/status', wajibAdmin, async (req, res, next) => {
     });
 
     res.json({ data });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/peminjaman/:id — menghapus baris peminjaman (ADMIN)
+//
+// Dipakai membersihkan kiriman iseng, dobel, atau salah isi. Form pengajuan
+// terbuka untuk umum, jadi data semacam itu pasti ada.
+router.delete('/:id', wajibAdmin, async (req, res, next) => {
+  try {
+    const id = v.uuid(req.params.id, 'ID peminjaman', { wajib: true });
+
+    const { data: pengajuan, error: errAmbil } = await supabaseAdmin
+      .from('peminjaman')
+      .select('kode_peminjaman, nama_peminjam, jumlah, status, alat:alat_id(nama_alat)')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (errAmbil) throw errAmbil;
+    if (!pengajuan) throw galatTidakDitemukan('Data peminjaman tidak ditemukan.');
+
+    // Menghapus baris yang sedang menahan stok akan melepas stoknya lewat
+    // trigger, padahal alatnya masih berada di tangan guru. Catatan akan
+    // mengatakan alat tersedia sementara kenyataannya tidak.
+    if (STATUS_MENAHAN_STOK.includes(pengajuan.status)) {
+      throw galatKonflik(
+        `Pengajuan ini berstatus "${pengajuan.status}" dan sedang menahan ` +
+        `${pengajuan.jumlah} unit "${pengajuan.alat?.nama_alat}". Catat pengembaliannya ` +
+        'atau batalkan dulu, baru barisnya boleh dihapus.'
+      );
+    }
+
+    const { error } = await supabaseAdmin.from('peminjaman').delete().eq('id', id);
+    if (error) throw error;
+
+    await catatAktivitas({
+      admin: req.admin,
+      aksi: 'Menghapus data peminjaman',
+      keterangan:
+        `Menghapus pengajuan ${pengajuan.kode_peminjaman} atas nama ` +
+        `${pengajuan.nama_peminjam} untuk "${pengajuan.alat?.nama_alat}"`,
+    });
+
+    res.json({ pesan: `Pengajuan ${pengajuan.kode_peminjaman} berhasil dihapus.` });
   } catch (err) {
     next(err);
   }

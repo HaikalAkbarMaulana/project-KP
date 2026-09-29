@@ -1,6 +1,38 @@
 import { supabase } from './supabaseClient';
 
-const BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+const HOST_LOOPBACK = ['localhost', '127.0.0.1', '::1', '[::1]'];
+
+/**
+ * Menentukan alamat backend.
+ *
+ * VITE_API_BASE_URL biasanya berisi http://localhost:4000/api. Itu benar
+ * selama halaman dibuka di komputer yang sama, tapi begitu dibuka dari HP
+ * lewat alamat jaringan, "localhost" berarti HP itu sendiri — dan di sana
+ * tentu tidak ada backend. Maka saat halaman diakses dari perangkat lain,
+ * nama host-nya diikutkan dari alamat halaman: HP menghubungi backend di
+ * komputer yang sama dengan yang menyajikan halamannya.
+ *
+ * Alamat API yang sudah menunjuk server sungguhan (mis. domain sekolah)
+ * tidak diutak-atik.
+ */
+function tentukanBaseUrl() {
+  const dariEnv = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+  const hostHalaman = window.location.hostname;
+
+  if (!dariEnv) return `${window.location.protocol}//${hostHalaman}:4000/api`;
+  if (HOST_LOOPBACK.includes(hostHalaman)) return dariEnv;
+
+  try {
+    const url = new URL(dariEnv);
+    if (!HOST_LOOPBACK.includes(url.hostname)) return dariEnv;
+    url.hostname = hostHalaman;
+    return url.toString().replace(/\/$/, '');
+  } catch {
+    return dariEnv;
+  }
+}
+
+const BASE_URL = tentukanBaseUrl();
 
 export class GalatApi extends Error {
   constructor(pesan, status) {

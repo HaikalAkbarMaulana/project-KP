@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Navigate, useNavigate, useLocation, Link } from 'react-router-dom';
-import { FlaskConical, Eye, EyeOff, ArrowLeft } from 'lucide-react';
+import { Eye, EyeOff, ArrowLeft } from 'lucide-react';
+import LogoSekolah from '../../components/LogoSekolah';
 
 import { useAuth } from '../../context/AuthContext';
 import { Memuat, PesanGalat } from '../../components/Keadaan';
@@ -43,11 +44,9 @@ export default function MasukAdmin() {
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-ink-900 to-ink-800 px-4 py-10">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-500 text-white">
-            <FlaskConical size={24} />
-          </div>
+          <LogoSekolah ukuran={96} kelas="mx-auto mb-4 h-20 w-20 drop-shadow-lg" />
           <h1 className="font-display text-2xl font-bold text-white">Panel Admin Lab</h1>
-          <p className="mt-1 text-sm text-slate-400">SMPN 3 Kedungreja</p>
+          <p className="mt-1 text-sm text-slate-400">SMP Negeri 3 Kedungreja</p>
         </div>
 
         <form onSubmit={kirim} className="space-y-4 rounded-2xl bg-white p-6 shadow-xl">

@@ -23,9 +23,13 @@ export default function DetailAlat() {
   const { data, memuat, galat, muatUlang } = useAmbilData(`/alat/${id}`);
   const alat = data?.data;
 
-  if (memuat) return <Memuat />;
+  // Penanda memuat hanya menggantikan halaman saat memang belum ada apa-apa
+  // untuk ditampilkan. Kalau menggantikannya pada setiap pemuatan ulang,
+  // formulir ikut terbongkar berikut isinya — itulah yang dulu membuat kode
+  // peminjaman lenyap begitu pengajuan terkirim.
+  if (memuat && !alat) return <Memuat />;
 
-  if (galat) {
+  if (galat && !alat) {
     return (
       <div className="mx-auto max-w-4xl px-6 py-10">
         <PesanGalat pesan={galat} onCobaLagi={muatUlang} />
@@ -75,7 +79,7 @@ export default function DetailAlat() {
         </div>
 
         <div className="lg:col-span-3">
-          <FormPengajuan alat={alat} onBerhasilAjukan={muatUlang} />
+          <FormPengajuan alat={alat} />
         </div>
       </div>
     </div>
@@ -91,7 +95,7 @@ function Rincian({ label, nilai }) {
   );
 }
 
-function FormPengajuan({ alat, onBerhasilAjukan }) {
+function FormPengajuan({ alat }) {
   const [form, setForm] = useState(FORM_KOSONG);
   const [galat, setGalat] = useState('');
   const [mengirim, setMengirim] = useState(false);
@@ -116,7 +120,9 @@ function FormPengajuan({ alat, onBerhasilAjukan }) {
       });
       setKodeBerhasil(res.data.kode_peminjaman);
       setForm(FORM_KOSONG);
-      onBerhasilAjukan();
+      // Data alat sengaja tidak dimuat ulang di sini: pengajuan yang baru
+      // masuk belum menahan stok sama sekali — stok baru berkurang ketika
+      // petugas lab menyetujuinya. Jadi angkanya memang tidak berubah.
     } catch (err) {
       setGalat(err.message);
     } finally {

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  Check, X, PackageCheck, PackageOpen, Search, Download, Phone, AlertTriangle,
+  Check, X, PackageCheck, PackageOpen, Search, Download, Phone, AlertTriangle, Trash2,
 } from 'lucide-react';
 
 import { api, keQuery } from '../../lib/api';
@@ -11,6 +11,7 @@ import {
   STATUS_LABEL, STATUS_WARNA, angka, tanggalSingkat, sisaHari,
 } from '../../lib/format';
 import Modal from '../../components/Modal';
+import KonfirmasiHapus from '../../components/KonfirmasiHapus';
 import { Memuat, PesanGalat, Kosong } from '../../components/Keadaan';
 
 const PER_HALAMAN = 25;
@@ -47,6 +48,7 @@ export default function DataPeminjaman() {
   const [pencarian, setPencarian] = useState('');
   const [halaman, setHalaman] = useState(1);
   const [aksiTertunda, setAksiTertunda] = useState(null);
+  const [akanDihapus, setAkanDihapus] = useState(null);
   const [pesanUnduh, setPesanUnduh] = useState('');
   const [galatAksi, setGalatAksi] = useState('');
 
@@ -189,6 +191,7 @@ export default function DataPeminjaman() {
                       if (aksi.mintaCatatan) setAksiTertunda({ item, aksi });
                       else jalankanAksi(item, aksi);
                     }}
+                    onHapus={() => setAkanDihapus(item)}
                   />
                 ))}
               </tbody>
@@ -217,6 +220,23 @@ export default function DataPeminjaman() {
         </>
       )}
 
+      <KonfirmasiHapus
+        terbuka={!!akanDihapus}
+        judul="Hapus data peminjaman"
+        keterangan={
+          akanDihapus
+            ? `Pengajuan ${akanDihapus.kode_peminjaman} atas nama ${akanDihapus.nama_peminjam} ` +
+              `untuk "${akanDihapus.alat?.nama_alat}" akan dihapus permanen, berikut identitas ` +
+              'peminjamnya. Baris ini juga akan hilang dari laporan CSV dan grafik dashboard.'
+            : ''
+        }
+        onTutup={() => setAkanDihapus(null)}
+        onKonfirmasi={async () => {
+          await api.delete(`/peminjaman/${akanDihapus.id}`);
+          muatUlang();
+        }}
+      />
+
       <DialogCatatan
         tertunda={aksiTertunda}
         onTutup={() => setAksiTertunda(null)}
@@ -229,10 +249,13 @@ export default function DataPeminjaman() {
   );
 }
 
-function BarisPeminjaman({ item, onAksi }) {
+function BarisPeminjaman({ item, onAksi, onHapus }) {
   const sisa = sisaHari(item.tanggal_rencana_kembali);
   const terlambat = item.status === 'dipinjam' && sisa < 0;
   const aksi = AKSI_PER_STATUS[item.status] ?? [];
+
+  // Harus sama dengan aturan di backend dan di trigger database.
+  const menahanStok = ['disetujui', 'dipinjam'].includes(item.status);
 
   return (
     <tr className={terlambat ? 'bg-rose-50/50' : 'hover:bg-slate-50'}>
@@ -283,22 +306,36 @@ function BarisPeminjaman({ item, onAksi }) {
 
       <td className="px-5 py-3">
         <div className="flex justify-end gap-1">
-          {aksi.length === 0 ? (
-            <span className="text-xs text-slate-300">—</span>
-          ) : (
-            aksi.map((a) => (
-              <button
-                key={a.status}
-                type="button"
-                title={a.label}
-                onClick={() => onAksi(a)}
-                className={`rounded-lg p-2 text-slate-500 ${a.gaya}`}
-              >
-                <a.ikon size={16} />
-                <span className="sr-only">{a.label}</span>
-              </button>
-            ))
-          )}
+          {aksi.map((a) => (
+            <button
+              key={a.status}
+              type="button"
+              title={a.label}
+              onClick={() => onAksi(a)}
+              className={`rounded-lg p-2 text-slate-500 ${a.gaya}`}
+            >
+              <a.ikon size={16} />
+              <span className="sr-only">{a.label}</span>
+            </button>
+          ))}
+
+          {/* Baris yang sedang menahan stok tidak boleh dihapus: alatnya
+              masih di tangan guru, dan menghapusnya akan membuat catatan
+              stok menyatakan tersedia padahal tidak. */}
+          <button
+            type="button"
+            onClick={onHapus}
+            disabled={menahanStok}
+            title={
+              menahanStok
+                ? 'Catat pengembalian atau batalkan dulu sebelum menghapus'
+                : 'Hapus data peminjaman'
+            }
+            className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-30"
+          >
+            <Trash2 size={16} />
+            <span className="sr-only">Hapus data peminjaman</span>
+          </button>
         </div>
       </td>
     </tr>
