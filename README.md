@@ -168,7 +168,8 @@ Frontend berjalan di `http://127.0.0.1:5173`. Masuk sebagai admin lewat
 - **Ruangan & Kategori** — data master.
 - **Akun Admin** — daftarkan petugas lab lain, nonaktifkan aksesnya, atau hapus.
 - **Unduh CSV** di halaman Inventaris dan Peminjaman, siap dibuka di Excel
-  (pemisah titik koma, sudah ber-BOM UTF-8).
+  (pemisah koma, diawali baris `sep=,` dan BOM UTF-8 sehingga kolomnya
+  terpisah benar di Excel berbahasa Inggris maupun Indonesia).
 
 ---
 

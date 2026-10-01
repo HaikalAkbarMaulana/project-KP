@@ -4,27 +4,11 @@ import { wajibAdmin } from '../middleware/auth.js';
 import { SEMUA_STATUS } from './peminjaman.js';
 import * as v from '../lib/validasi.js';
 import { galatValidasi } from '../lib/galat.js';
+import { susunCsv } from '../lib/csv.js';
 
 const router = Router();
 
 const BATAS_BARIS = 10_000;
-
-/**
- * Menyusun satu sel CSV.
- *
- * Dua hal yang ditangani di sini:
- *  - tanda kutip, titik koma, dan baris baru dibungkus tanda kutip ganda;
- *  - sel yang diawali = + - @ diberi tanda kutip tunggal di depan, karena
- *    Excel/LibreOffice memperlakukan awalan itu sebagai rumus. Tanpa ini,
- *    nama alat seperti "=Mikroskop" bisa dieksekusi saat berkas dibuka.
- */
-function sel(nilai) {
-  if (nilai === null || nilai === undefined) return '';
-  let teks = String(nilai);
-  if (/^[=+\-@\t\r]/.test(teks)) teks = `'${teks}`;
-  if (/["\n;,]/.test(teks)) teks = `"${teks.replace(/"/g, '""')}"`;
-  return teks;
-}
 
 /**
  * Merangkai berkas CSV.
@@ -33,11 +17,6 @@ function sel(nilai) {
  * Indonesia membaca koma sebagai desimal dan tanpa BOM huruf beraksen jadi
  * berantakan.
  */
-function susunCsv(judulKolom, baris) {
-  const isi = [judulKolom, ...baris].map((r) => r.map(sel).join(';')).join('\r\n');
-  return `﻿${isi}\r\n`;
-}
-
 function kirimCsv(res, namaBerkas, isi) {
   const stempel = new Date().toISOString().slice(0, 10);
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -154,8 +133,11 @@ router.get('/inventaris.csv', wajibAdmin, async (req, res, next) => {
       a.jumlah_tersedia,
       a.tahun_perolehan,
       a.sumber_dana,
-      a.harga_satuan ?? '',
-      a.harga_satuan ? Number(a.harga_satuan) * a.jumlah_total : '',
+      // Dibulatkan ke rupiah penuh. Angka berkoma seperti "1500000.00"
+      // terbaca sebagai teks di Excel berbahasa Indonesia, yang memakai
+      // koma sebagai tanda desimal.
+      a.harga_satuan ? Math.round(Number(a.harga_satuan)) : '',
+      a.harga_satuan ? Math.round(Number(a.harga_satuan) * a.jumlah_total) : '',
       a.boleh_dipinjam ? 'Ya' : 'Tidak',
       a.deskripsi,
     ]);
