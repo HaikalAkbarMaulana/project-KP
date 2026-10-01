@@ -37,6 +37,52 @@ body {
   @apply outline-none ring-2 ring-brand-500 ring-offset-2;
 }
 
+/* ------------------------------------------------------------------
+   Aturan cetak.
+
+   Saat laporan dicetak, yang keluar hanya isinya — sidebar, tombol, dan
+   penyaring tidak ikut. Beri kelas "tanpa-cetak" pada apa pun yang tidak
+   perlu tercetak.
+   ------------------------------------------------------------------ */
+@media print {
+  @page {
+    size: A4;
+    margin: 15mm;
+  }
+
+  .tanpa-cetak {
+    display: none !important;
+  }
+
+  body {
+    background: #fff;
+  }
+
+  /* Panel admin menggeser isinya ke kanan untuk memberi ruang sidebar.
+     Saat dicetak sidebarnya hilang, jadi geserannya ikut dibatalkan. */
+  .wadah-admin {
+    padding-left: 0 !important;
+  }
+
+  .area-cetak {
+    padding: 0 !important;
+  }
+
+  /* Kotak dan bayangan hanya menghabiskan tinta tanpa menambah kejelasan. */
+  .area-cetak * {
+    box-shadow: none !important;
+  }
+
+  /* Baris tabel jangan terpotong di pergantian halaman. */
+  tr, img {
+    break-inside: avoid;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

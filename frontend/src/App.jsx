@@ -22,6 +22,7 @@ const MasukAdmin = lazy(() => import('./pages/admin/MasukAdmin'));
 const Dashboard = lazy(() => import('./pages/admin/Dashboard'));
 const DataAlat = lazy(() => import('./pages/admin/DataAlat'));
 const DataPeminjaman = lazy(() => import('./pages/admin/DataPeminjaman'));
+const Laporan = lazy(() => import('./pages/admin/Laporan'));
 const DataRuangan = lazy(() => import('./pages/admin/DataRuangan'));
 const DataKategori = lazy(() => import('./pages/admin/DataKategori'));
 const AkunAdmin = lazy(() => import('./pages/admin/AkunAdmin'));
@@ -46,6 +47,7 @@ export default function App() {
               <Route index element={<Dashboard />} />
               <Route path="alat" element={<DataAlat />} />
               <Route path="peminjaman" element={<DataPeminjaman />} />
+              <Route path="laporan" element={<Laporan />} />
               <Route path="ruangan" element={<DataRuangan />} />
               <Route path="kategori" element={<DataKategori />} />
               <Route path="akun" element={<AkunAdmin />} />

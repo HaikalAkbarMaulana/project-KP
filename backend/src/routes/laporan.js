@@ -3,6 +3,7 @@ import { supabaseAdmin } from '../supabaseClient.js';
 import { wajibAdmin } from '../middleware/auth.js';
 import { SEMUA_STATUS } from './peminjaman.js';
 import * as v from '../lib/validasi.js';
+import { galatValidasi } from '../lib/galat.js';
 
 const router = Router();
 
@@ -46,6 +47,79 @@ function kirimCsv(res, namaBerkas, isi) {
 
 const tanggalId = (nilai) =>
   nilai ? new Date(nilai).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+
+// GET /api/laporan/rekap — angka rekapitulasi untuk laporan cetak (ADMIN)
+//
+// Dihitung di sini, bukan di browser, supaya seluruh peminjaman dalam
+// rentang ikut terhitung — bukan hanya yang kebetulan tampil di halaman
+// tabel yang sedang dibuka.
+router.get('/rekap', wajibAdmin, async (req, res, next) => {
+  try {
+    const dari = v.tanggal(req.query.dari, 'Tanggal mulai', { wajib: true });
+    const sampai = v.tanggal(req.query.sampai, 'Tanggal akhir', { wajib: true });
+
+    if (sampai < dari) {
+      throw galatValidasi('Tanggal akhir tidak boleh lebih awal dari tanggal mulai.');
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('peminjaman')
+      .select(`
+        kode_peminjaman, nama_peminjam, nip_peminjam, mapel, jumlah, keperluan,
+        tanggal_pinjam, tanggal_rencana_kembali, tanggal_kembali_aktual,
+        status, jumlah_kembali_rusak, jumlah_hilang,
+        alat:alat_id(kode_alat, nama_alat)
+      `)
+      .gte('tanggal_pinjam', dari)
+      .lte('tanggal_pinjam', sampai)
+      .order('tanggal_pinjam')
+      .limit(BATAS_BARIS);
+
+    if (error) throw error;
+    const daftar = data ?? [];
+
+    const ringkasan = {
+      totalPengajuan: daftar.length,
+      totalUnit: 0,
+      unitRusak: 0,
+      unitHilang: 0,
+      perStatus: Object.fromEntries(SEMUA_STATUS.map((s) => [s, 0])),
+      jumlahPeminjam: new Set(daftar.map((p) => p.nama_peminjam.toLowerCase())).size,
+    };
+
+    const perAlat = new Map();
+
+    for (const p of daftar) {
+      ringkasan.perStatus[p.status] = (ringkasan.perStatus[p.status] || 0) + 1;
+      ringkasan.totalUnit += p.jumlah;
+      ringkasan.unitRusak += p.jumlah_kembali_rusak || 0;
+      ringkasan.unitHilang += p.jumlah_hilang || 0;
+
+      const kunci = p.alat?.kode_alat || '-';
+      const baris = perAlat.get(kunci) || {
+        kode: kunci,
+        nama: p.alat?.nama_alat || '(alat terhapus)',
+        kali: 0, unit: 0, rusak: 0, hilang: 0,
+      };
+      baris.kali += 1;
+      baris.unit += p.jumlah;
+      baris.rusak += p.jumlah_kembali_rusak || 0;
+      baris.hilang += p.jumlah_hilang || 0;
+      perAlat.set(kunci, baris);
+    }
+
+    res.json({
+      data: {
+        periode: { dari, sampai },
+        ringkasan,
+        perAlat: [...perAlat.values()].sort((a, b) => b.unit - a.unit),
+        daftar,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // GET /api/laporan/inventaris.csv — Buku Inventaris Barang (ADMIN)
 router.get('/inventaris.csv', wajibAdmin, async (req, res, next) => {

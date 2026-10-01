@@ -32,10 +32,12 @@ export default function AdminLayout() {
   });
 
   return (
-    <div className="min-h-screen bg-slate-50 lg:pl-64">
-      <SidebarAdmin terbuka={menuTerbuka} onTutup={() => setMenuTerbuka(false)} />
+    <div className="wadah-admin min-h-screen bg-slate-50 lg:pl-64">
+      <div className="tanpa-cetak">
+        <SidebarAdmin terbuka={menuTerbuka} onTutup={() => setMenuTerbuka(false)} />
+      </div>
 
-      <header className="sticky top-0 z-20 flex items-center justify-between gap-4 border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur sm:px-6 lg:px-8">
+      <header className="tanpa-cetak sticky top-0 z-20 flex items-center justify-between gap-4 border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur sm:px-6 lg:px-8">
         <div className="flex min-w-0 items-center gap-3">
           <button
             type="button"
@@ -76,7 +78,7 @@ export default function AdminLayout() {
         </div>
       </header>
 
-      <main className="p-4 sm:p-6 lg:p-8">
+      <main className="area-cetak p-4 sm:p-6 lg:p-8">
         <Outlet />
       </main>
     </div>
