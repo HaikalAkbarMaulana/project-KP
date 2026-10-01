@@ -64,23 +64,48 @@ const batasPengajuan = pembatasLaju({
 });
 
 // POST /api/peminjaman — pengajuan peminjaman oleh guru (PUBLIK)
+/** Membaca dan memvalidasi isian peminjaman, dipakai form publik maupun admin. */
+function bacaIsianPeminjaman(body) {
+  const pengajuan = {
+    nama_peminjam: v.teks(body.nama_peminjam, 'Nama peminjam', { wajib: true, maks: 120 }),
+    nip_peminjam: v.teks(body.nip_peminjam, 'NIP / NUPTK', { maks: 30 }),
+    mapel: v.teks(body.mapel, 'Mata pelajaran', { maks: 80 }),
+    no_hp: v.nomorHp(body.no_hp, 'Nomor HP', { wajib: true }),
+    alat_id: v.uuid(body.alat_id, 'Alat', { wajib: true }),
+    jumlah: v.bilangan(body.jumlah, 'Jumlah', { wajib: true, min: 1, maks: 1000 }),
+    keperluan: v.teks(body.keperluan, 'Keperluan', { wajib: true, maks: 500 }),
+    tanggal_pinjam: v.tanggal(body.tanggal_pinjam, 'Tanggal pinjam', { wajib: true }),
+    tanggal_rencana_kembali: v.tanggal(body.tanggal_rencana_kembali, 'Rencana kembali', { wajib: true }),
+  };
+
+  if (pengajuan.tanggal_rencana_kembali < pengajuan.tanggal_pinjam) {
+    throw galatValidasi('Tanggal rencana kembali tidak boleh lebih awal dari tanggal pinjam.');
+  }
+  return pengajuan;
+}
+
+/** Mengambil alat sekaligus memastikan ia memang boleh dan cukup untuk dipinjam. */
+async function ambilAlatSiapPinjam(alatId, jumlah) {
+  const { data: alat, error } = await supabaseAdmin
+    .from('alat')
+    .select('id, nama_alat, jumlah_tersedia, boleh_dipinjam')
+    .eq('id', alatId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!alat) throw galatTidakDitemukan('Alat yang dipilih tidak ditemukan.');
+  if (!alat.boleh_dipinjam) {
+    throw galatValidasi(`"${alat.nama_alat}" tidak dipinjamkan keluar. Silakan hubungi petugas lab.`);
+  }
+  if (alat.jumlah_tersedia < jumlah) {
+    throw galatValidasi(`Stok tidak mencukupi. Saat ini tersedia ${alat.jumlah_tersedia} unit.`);
+  }
+  return alat;
+}
+
 router.post('/', batasPengajuan, async (req, res, next) => {
   try {
-    const pengajuan = {
-      nama_peminjam: v.teks(req.body.nama_peminjam, 'Nama peminjam', { wajib: true, maks: 120 }),
-      nip_peminjam: v.teks(req.body.nip_peminjam, 'NIP / NUPTK', { maks: 30 }),
-      mapel: v.teks(req.body.mapel, 'Mata pelajaran', { maks: 80 }),
-      no_hp: v.nomorHp(req.body.no_hp, 'Nomor HP', { wajib: true }),
-      alat_id: v.uuid(req.body.alat_id, 'Alat', { wajib: true }),
-      jumlah: v.bilangan(req.body.jumlah, 'Jumlah', { wajib: true, min: 1, maks: 1000 }),
-      keperluan: v.teks(req.body.keperluan, 'Keperluan', { wajib: true, maks: 500 }),
-      tanggal_pinjam: v.tanggal(req.body.tanggal_pinjam, 'Tanggal pinjam', { wajib: true }),
-      tanggal_rencana_kembali: v.tanggal(req.body.tanggal_rencana_kembali, 'Rencana kembali', { wajib: true }),
-    };
-
-    if (pengajuan.tanggal_rencana_kembali < pengajuan.tanggal_pinjam) {
-      throw galatValidasi('Tanggal rencana kembali tidak boleh lebih awal dari tanggal pinjam.');
-    }
+    const pengajuan = bacaIsianPeminjaman(req.body);
 
     // Toleransi satu hari ke belakang supaya guru yang mengisi form
     // di malam hari untuk praktikum hari itu tidak tertolak.
@@ -89,22 +114,7 @@ router.post('/', batasPengajuan, async (req, res, next) => {
       throw galatValidasi('Tanggal pinjam sudah lewat. Pilih tanggal hari ini atau setelahnya.');
     }
 
-    const { data: alat, error: errAlat } = await supabaseAdmin
-      .from('alat')
-      .select('id, nama_alat, jumlah_tersedia, boleh_dipinjam')
-      .eq('id', pengajuan.alat_id)
-      .maybeSingle();
-
-    if (errAlat) throw errAlat;
-    if (!alat) throw galatTidakDitemukan('Alat yang dipilih tidak ditemukan.');
-    if (!alat.boleh_dipinjam) {
-      throw galatValidasi(`"${alat.nama_alat}" tidak dipinjamkan keluar. Silakan hubungi petugas lab.`);
-    }
-    if (alat.jumlah_tersedia < pengajuan.jumlah) {
-      throw galatValidasi(
-        `Stok tidak mencukupi. Saat ini tersedia ${alat.jumlah_tersedia} unit.`
-      );
-    }
+    const alat = await ambilAlatSiapPinjam(pengajuan.alat_id, pengajuan.jumlah);
 
     // Pengecekan stok di atas hanya penyaring awal supaya pesannya ramah.
     // Stok baru benar-benar ditahan saat admin menyetujui, dan di sanalah
@@ -131,7 +141,7 @@ router.post('/', batasPengajuan, async (req, res, next) => {
 async function sisipkanDenganKodeUnik(pengajuan, sisaPercobaan = 5) {
   const { data, error } = await supabaseAdmin
     .from('peminjaman')
-    .insert({ ...pengajuan, kode_peminjaman: buatKodePeminjaman(), status: 'pending' })
+    .insert({ status: 'pending', ...pengajuan, kode_peminjaman: buatKodePeminjaman() })
     .select('kode_peminjaman, status')
     .single();
 
@@ -261,6 +271,56 @@ function samarkanNama(nama) {
 // ------------------------------------------------------------
 // ENDPOINT ADMIN
 // ------------------------------------------------------------
+
+// POST /api/peminjaman/catat — petugas lab mencatat peminjaman di tempat (ADMIN)
+//
+// Untuk guru yang datang langsung ke lab. Tanpa ini petugas harus menyuruh
+// guru yang sudah berdiri di depannya membuka HP dan mengisi form publik.
+//
+// Berbeda dari form publik dalam dua hal: statusnya boleh langsung
+// "dipinjam" karena alatnya memang diserahkan saat itu juga, dan tanggal
+// pinjam boleh mundur ke belakang karena petugas kadang baru sempat
+// mencatat kejadian kemarin.
+router.post('/catat', wajibAdmin, async (req, res, next) => {
+  try {
+    const pengajuan = bacaIsianPeminjaman(req.body);
+    const status = v.pilihan(req.body.status, 'Status', ['disetujui', 'dipinjam'], {
+      bawaan: 'dipinjam',
+    });
+
+    const alat = await ambilAlatSiapPinjam(pengajuan.alat_id, pengajuan.jumlah);
+
+    const { data, error } = await sisipkanDenganKodeUnik({
+      ...pengajuan,
+      status,
+      diproses_oleh: req.admin.id,
+    });
+
+    if (error) {
+      if (error.code === '23514') {
+        throw galatKonflik(
+          `Stok "${alat.nama_alat}" tidak mencukupi. Segarkan halaman lalu periksa lagi.`
+        );
+      }
+      throw error;
+    }
+
+    await catatAktivitas({
+      admin: req.admin,
+      aksi: 'Mencatat peminjaman di tempat',
+      keterangan:
+        `Mencatat ${pengajuan.nama_peminjam} meminjam "${alat.nama_alat}" ` +
+        `(${pengajuan.jumlah} unit) dengan status ${status}`,
+    });
+
+    res.status(201).json({
+      data,
+      pesan: `Peminjaman tercatat dengan kode ${data.kode_peminjaman}.`,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // GET /api/peminjaman — daftar seluruh pengajuan (ADMIN)
 router.get('/', wajibAdmin, async (req, res, next) => {
