@@ -123,6 +123,12 @@ create table if not exists public.peminjaman (
   tanggal_rencana_kembali date not null,
   tanggal_kembali_aktual date,
 
+  -- Rincian keadaan alat saat dikembalikan. Jumlah yang kembali dalam
+  -- keadaan baik tidak disimpan tersendiri karena bisa dihitung:
+  -- jumlah - jumlah_kembali_rusak - jumlah_hilang.
+  jumlah_kembali_rusak integer not null default 0,
+  jumlah_hilang integer not null default 0,
+
   status text not null default 'pending'
     check (status in ('pending', 'disetujui', 'ditolak', 'dipinjam', 'dikembalikan', 'dibatalkan')),
   catatan_admin text,
@@ -132,6 +138,11 @@ create table if not exists public.peminjaman (
   diperbarui_pada timestamptz not null default now(),
 
   constraint cek_urutan_tanggal check (tanggal_rencana_kembali >= tanggal_pinjam),
+  constraint cek_rincian_pengembalian check (
+    jumlah_kembali_rusak >= 0
+    and jumlah_hilang >= 0
+    and jumlah_kembali_rusak + jumlah_hilang <= jumlah
+  ),
   constraint cek_tanggal_kembali_aktual check (
     tanggal_kembali_aktual is null or tanggal_kembali_aktual >= tanggal_pinjam
   )

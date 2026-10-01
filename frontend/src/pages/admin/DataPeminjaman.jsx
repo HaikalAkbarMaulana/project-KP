@@ -38,7 +38,10 @@ const AKSI_PER_STATUS = {
     { status: 'dibatalkan', label: 'Batalkan', ikon: X, gaya: 'hover:bg-rose-50 hover:text-rose-600', mintaCatatan: true },
   ],
   dipinjam: [
-    { status: 'dikembalikan', label: 'Catat pengembalian', ikon: PackageCheck, gaya: 'hover:bg-slate-100 hover:text-ink-900' },
+    {
+      status: 'dikembalikan', label: 'Catat pengembalian', ikon: PackageCheck,
+      gaya: 'hover:bg-slate-100 hover:text-ink-900', mintaRincian: true,
+    },
   ],
 };
 
@@ -52,6 +55,7 @@ export default function DataPeminjaman() {
   const [aksiTertunda, setAksiTertunda] = useState(null);
   const [akanDihapus, setAkanDihapus] = useState(null);
   const [formCatat, setFormCatat] = useState(false);
+  const [pengembalian, setPengembalian] = useState(null);
   const [pesanSukses, setPesanSukses] = useState('');
   const [pesanUnduh, setPesanUnduh] = useState('');
   const [galatAksi, setGalatAksi] = useState('');
@@ -201,7 +205,8 @@ export default function DataPeminjaman() {
                     key={item.id}
                     item={item}
                     onAksi={(aksi) => {
-                      if (aksi.mintaCatatan) setAksiTertunda({ item, aksi });
+                      if (aksi.mintaRincian) setPengembalian(item);
+                      else if (aksi.mintaCatatan) setAksiTertunda({ item, aksi });
                       else jalankanAksi(item, aksi);
                     }}
                     onHapus={() => setAkanDihapus(item)}
@@ -232,6 +237,16 @@ export default function DataPeminjaman() {
           )}
         </>
       )}
+
+      <DialogPengembalian
+        item={pengembalian}
+        onTutup={() => setPengembalian(null)}
+        onSelesai={(pesan) => {
+          setPengembalian(null);
+          setPesanSukses(pesan);
+          muatUlang();
+        }}
+      />
 
       <FormCatatPeminjaman
         terbuka={formCatat}
@@ -339,6 +354,15 @@ function BarisPeminjaman({ item, onAksi, onHapus }) {
         <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${STATUS_WARNA[item.status]}`}>
           {STATUS_LABEL[item.status]}
         </span>
+        {(item.jumlah_kembali_rusak > 0 || item.jumlah_hilang > 0) && (
+          <p className="mt-1 text-xs font-medium text-amber-600">
+            {[
+              item.jumlah_kembali_rusak > 0 ? `${item.jumlah_kembali_rusak} rusak` : null,
+              item.jumlah_hilang > 0 ? `${item.jumlah_hilang} hilang` : null,
+            ].filter(Boolean).join(', ')}
+          </p>
+        )}
+
         {item.catatan_admin && (
           <p className="mt-1 max-w-[180px] truncate text-xs text-slate-400" title={item.catatan_admin}>
             {item.catatan_admin}
@@ -381,6 +405,123 @@ function BarisPeminjaman({ item, onAksi, onHapus }) {
         </div>
       </td>
     </tr>
+  );
+}
+
+/**
+ * Pencatatan pengembalian beserta rinciannya.
+ *
+ * Bawaannya menganggap semua kembali utuh, karena itu memang yang paling
+ * sering terjadi — petugas cukup menekan Simpan. Kolom rusak dan hilang
+ * baru diisi bila kenyataannya berbeda.
+ */
+function DialogPengembalian({ item, onTutup, onSelesai }) {
+  const [rusak, setRusak] = useState(0);
+  const [hilang, setHilang] = useState(0);
+  const [catatan, setCatatan] = useState('');
+  const [galat, setGalat] = useState('');
+  const [menyimpan, setMenyimpan] = useState(false);
+  const [idTerakhir, setIdTerakhir] = useState(null);
+
+  const penanda = item?.id ?? null;
+  if (penanda !== idTerakhir) {
+    setIdTerakhir(penanda);
+    setRusak(0); setHilang(0); setCatatan(''); setGalat('');
+  }
+
+  if (!item) return <Modal terbuka={false} judul="" onTutup={onTutup} />;
+
+  const angkaRusak = Number(rusak) || 0;
+  const angkaHilang = Number(hilang) || 0;
+  const kembaliBaik = item.jumlah - angkaRusak - angkaHilang;
+  const berlebih = kembaliBaik < 0;
+
+  async function simpan(e) {
+    e.preventDefault();
+    setGalat('');
+    setMenyimpan(true);
+    try {
+      const res = await api.patch(`/peminjaman/${item.id}/status`, {
+        status: 'dikembalikan',
+        jumlah_kembali_rusak: angkaRusak,
+        jumlah_hilang: angkaHilang,
+        ...(catatan.trim() ? { catatan_admin: catatan.trim() } : {}),
+      });
+      onSelesai(res.pesan || 'Pengembalian tercatat.');
+    } catch (err) {
+      setGalat(err.message);
+    } finally {
+      setMenyimpan(false);
+    }
+  }
+
+  return (
+    <Modal terbuka judul="Catat pengembalian" onTutup={onTutup} lebar="max-w-md">
+      <form onSubmit={simpan} className="space-y-4">
+        <p className="text-sm text-slate-600">
+          <strong>{item.alat?.nama_alat}</strong> sebanyak <strong>{item.jumlah} unit</strong>,
+          dipinjam {item.nama_peminjam}.
+        </p>
+
+        <PesanGalat pesan={galat} />
+
+        <div className="grid grid-cols-2 gap-4">
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-slate-600">Kembali rusak</span>
+            <input
+              type="number" min={0} max={item.jumlah} value={rusak}
+              onChange={(e) => setRusak(e.target.value)} className="input"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-slate-600">Tidak kembali / hilang</span>
+            <input
+              type="number" min={0} max={item.jumlah} value={hilang}
+              onChange={(e) => setHilang(e.target.value)} className="input"
+            />
+          </label>
+        </div>
+
+        <div
+          className={`rounded-xl px-4 py-3 text-sm ${
+            berlebih ? 'bg-rose-50 text-rose-700' : 'bg-slate-50 text-slate-700'
+          }`}
+        >
+          {berlebih ? (
+            <>Rincian melebihi jumlah pinjaman ({item.jumlah} unit). Periksa lagi angkanya.</>
+          ) : (
+            <>
+              Kembali dalam keadaan baik: <strong>{kembaliBaik} unit</strong>
+              {angkaRusak > 0 && <> · {angkaRusak} rusak akan masuk hitungan alat rusak</>}
+              {angkaHilang > 0 && <> · {angkaHilang} hilang akan mengurangi total inventaris</>}
+            </>
+          )}
+        </div>
+
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-slate-600">Catatan (opsional)</span>
+          <textarea
+            rows={2} maxLength={500} value={catatan} onChange={(e) => setCatatan(e.target.value)}
+            className="input" placeholder="Contoh: satu gelas ukur pecah saat praktikum"
+          />
+        </label>
+
+        <div className="flex justify-end gap-2 pt-1">
+          <button
+            type="button" onClick={onTutup}
+            className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+          >
+            Batal
+          </button>
+          <button
+            type="submit" disabled={menyimpan || berlebih}
+            className="rounded-xl bg-brand-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-50"
+          >
+            {menyimpan ? 'Menyimpan...' : 'Simpan pengembalian'}
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 

@@ -399,12 +399,17 @@ router.patch('/:id/status', wajibAdmin, async (req, res, next) => {
       );
     }
 
+    // Pengembalian ditangani fungsi database tersendiri karena menyentuh
+    // dua tabel sekaligus: status peminjaman dan stok alat.
+    if (status === 'dikembalikan') {
+      return await catatPengembalian(req, res, sekarang, catatan);
+    }
+
     const payload = {
       status,
       diproses_oleh: req.admin.id,
       ...(catatan !== null ? { catatan_admin: catatan } : {}),
     };
-    if (status === 'dikembalikan') payload.tanggal_kembali_aktual = hariIni();
 
     const { data, error } = await supabaseAdmin
       .from('peminjaman')
@@ -431,6 +436,68 @@ router.patch('/:id/status', wajibAdmin, async (req, res, next) => {
     next(err);
   }
 });
+
+/**
+ * Mencatat pengembalian beserta rincian unit yang rusak atau hilang.
+ *
+ * Tanpa rincian, pengembalian selalu dianggap utuh — petugas terpaksa
+ * menandai "dikembalikan" meski ada yang pecah, dan catatan stok pelan-pelan
+ * menyimpang dari kenyataan.
+ */
+async function catatPengembalian(req, res, sekarang, catatan) {
+  const rusak = v.bilangan(req.body.jumlah_kembali_rusak, 'Jumlah rusak', {
+    min: 0, maks: sekarang.jumlah, bawaan: 0,
+  });
+  const hilang = v.bilangan(req.body.jumlah_hilang, 'Jumlah hilang', {
+    min: 0, maks: sekarang.jumlah, bawaan: 0,
+  });
+
+  if (rusak + hilang > sekarang.jumlah) {
+    throw galatValidasi(
+      `Rincian melebihi jumlah pinjaman: ${rusak} rusak + ${hilang} hilang, ` +
+      `padahal yang dipinjam ${sekarang.jumlah} unit.`
+    );
+  }
+
+  const { data, error } = await supabaseAdmin.rpc('catat_pengembalian', {
+    p_id: sekarang.id,
+    p_rusak: rusak,
+    p_hilang: hilang,
+    p_admin: req.admin.id,
+    p_catatan: catatan,
+  });
+
+  if (error) {
+    const pesan = error.message || '';
+    if (pesan.includes('BUKAN_DIPINJAM')) {
+      throw galatKonflik('Pengembalian hanya bisa dicatat untuk peminjaman yang sedang dipinjam.');
+    }
+    if (pesan.includes('RINCIAN_MELEBIHI')) {
+      throw galatValidasi('Rincian rusak dan hilang melebihi jumlah yang dipinjam.');
+    }
+    if (pesan.includes('TIDAK_DITEMUKAN')) {
+      throw galatTidakDitemukan('Data peminjaman tidak ditemukan.');
+    }
+    throw error;
+  }
+
+  const kembaliBaik = sekarang.jumlah - rusak - hilang;
+  const rincian = [
+    `${kembaliBaik} baik`,
+    rusak > 0 ? `${rusak} rusak` : null,
+    hilang > 0 ? `${hilang} hilang` : null,
+  ].filter(Boolean).join(', ');
+
+  await catatAktivitas({
+    admin: req.admin,
+    aksi: LABEL_AKSI.dikembalikan,
+    keterangan:
+      `Mencatat pengembalian "${sekarang.alat?.nama_alat}" oleh ${sekarang.nama_peminjam} ` +
+      `(${rincian})`,
+  });
+
+  return res.json({ data, pesan: `Pengembalian tercatat: ${rincian}.` });
+}
 
 // DELETE /api/peminjaman/:id — menghapus baris peminjaman (ADMIN)
 //
