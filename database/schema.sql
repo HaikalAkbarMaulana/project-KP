@@ -269,6 +269,14 @@ create trigger trg_sinkron_stok
   after insert or update or delete on public.peminjaman
   for each row execute function public.fn_sinkron_stok();
 
+-- Ketiga fungsi di atas hanya dipakai trigger dan pemeliharaan, jadi tidak
+-- perlu terbuka sebagai endpoint RPC. Mencabut izin ini tidak mengganggu
+-- trigger, karena trigger berjalan atas nama pemilik tabel — bukan atas
+-- nama peran yang kebetulan menulis datanya.
+revoke all on function public.fn_sinkron_stok() from public, anon, authenticated;
+revoke all on function public.fn_sentuh_diperbarui() from public, anon, authenticated;
+revoke all on function public.hitung_ulang_stok() from public, anon, authenticated;
+
 -- ------------------------------------------------------------
 -- Hitung ulang jumlah_dipinjam dari nol.
 -- Jalankan lewat SQL Editor bila stok pernah diutak-atik manual:
