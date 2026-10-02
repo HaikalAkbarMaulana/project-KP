@@ -341,7 +341,31 @@ router.get('/', wajibAdmin, async (req, res, next) => {
     if (status) query = query.eq('status', status);
 
     const pola = v.polaPencarian(req.query.q);
-    if (pola) query = query.or(`nama_peminjam.ilike.${pola},kode_peminjaman.ilike.${pola}`);
+    if (pola) {
+      // Nama alat ada di tabel lain, jadi dicari lebih dulu lalu hasilnya
+      // dipakai sebagai daftar id. Cara ini lebih dapat diandalkan daripada
+      // menyaring lewat tabel tertanam, yang punya aturan tersendiri.
+      const { data: alatCocok, error: errCari } = await supabaseAdmin
+        .from('alat')
+        .select('id')
+        .or(`nama_alat.ilike.${pola},kode_alat.ilike.${pola}`)
+        .limit(100);
+
+      if (errCari) throw errCari;
+
+      const bagian = [`nama_peminjam.ilike.${pola}`, `kode_peminjaman.ilike.${pola}`];
+      const idAlat = (alatCocok ?? []).map((a) => a.id);
+      if (idAlat.length) bagian.push(`alat_id.in.(${idAlat.join(',')})`);
+
+      query = query.or(bagian.join(','));
+    }
+
+    // Rentang tanggal, mengikuti tanggal pinjam.
+    const dariTanggal = v.tanggal(req.query.dari, 'Tanggal mulai');
+    if (dariTanggal) query = query.gte('tanggal_pinjam', dariTanggal);
+
+    const sampaiTanggal = v.tanggal(req.query.sampai, 'Tanggal akhir');
+    if (sampaiTanggal) query = query.lte('tanggal_pinjam', sampaiTanggal);
 
     // ?terlambat=1 → masih dipinjam padahal rencana kembali sudah lewat
     if (v.boolean(req.query.terlambat, false)) {
@@ -498,6 +522,114 @@ async function catatPengembalian(req, res, sekarang, catatan) {
 
   return res.json({ data, pesan: `Pengembalian tercatat: ${rincian}.` });
 }
+
+// PUT /api/peminjaman/:id — membetulkan data pengajuan (ADMIN)
+//
+// Untuk salah ketik: nama, nomor HP, keperluan, jumlah, tanggal. Sebelum
+// ini satu-satunya jalan adalah menghapus lalu mencatat ulang — dan nomor
+// HP yang salah membuat tombol WhatsApp tidak berguna untuk baris itu.
+//
+// Alat yang dipinjam sengaja tidak bisa diganti: menukar alat sama saja
+// peminjaman yang berbeda, dan riwayatnya jadi membingungkan. Untuk kasus
+// itu, hapus barisnya lalu catat ulang.
+router.put('/:id', wajibAdmin, async (req, res, next) => {
+  try {
+    const id = v.uuid(req.params.id, 'ID peminjaman', { wajib: true });
+
+    const { data: sekarang, error: errAmbil } = await supabaseAdmin
+      .from('peminjaman')
+      .select('id, status, jumlah, tanggal_pinjam, tanggal_rencana_kembali, jumlah_kembali_rusak, jumlah_hilang, alat:alat_id(nama_alat)')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (errAmbil) throw errAmbil;
+    if (!sekarang) throw galatTidakDitemukan('Data peminjaman tidak ditemukan.');
+
+    // Identitas dan keperluan boleh dibetulkan kapan saja.
+    const payload = v.tanpaUndefined({
+      nama_peminjam: v.teks(req.body.nama_peminjam, 'Nama peminjam', {
+        wajib: req.body.nama_peminjam !== undefined, maks: 120,
+      }) ?? undefined,
+      nip_peminjam: req.body.nip_peminjam === undefined
+        ? undefined : v.teks(req.body.nip_peminjam, 'NIP / NUPTK', { maks: 30 }),
+      mapel: req.body.mapel === undefined
+        ? undefined : v.teks(req.body.mapel, 'Mata pelajaran', { maks: 80 }),
+      no_hp: v.nomorHp(req.body.no_hp, 'Nomor HP', {
+        wajib: req.body.no_hp !== undefined,
+      }) ?? undefined,
+      keperluan: v.teks(req.body.keperluan, 'Keperluan', {
+        wajib: req.body.keperluan !== undefined, maks: 500,
+      }) ?? undefined,
+    });
+
+    // Jumlah dan tanggal menyangkut stok, jadi hanya boleh diubah selama
+    // peminjamannya masih berjalan. Setelah dikembalikan, mengubahnya akan
+    // bertabrakan dengan rincian rusak/hilang yang sudah tercatat.
+    const masihBerjalan = ['pending', 'disetujui', 'dipinjam'].includes(sekarang.status);
+    const mintaUbahJadwal =
+      req.body.jumlah !== undefined ||
+      req.body.tanggal_pinjam !== undefined ||
+      req.body.tanggal_rencana_kembali !== undefined;
+
+    if (mintaUbahJadwal && !masihBerjalan) {
+      throw galatKonflik(
+        `Pengajuan berstatus "${sekarang.status}" hanya bisa dibetulkan identitas dan keperluannya. ` +
+        'Jumlah dan tanggal sudah terkunci bersama catatan pengembaliannya.'
+      );
+    }
+
+    if (mintaUbahJadwal) {
+      const jumlah = v.bilangan(req.body.jumlah, 'Jumlah', { min: 1, maks: 1000, bawaan: sekarang.jumlah });
+      const pinjam = v.tanggal(req.body.tanggal_pinjam, 'Tanggal pinjam') ?? sekarang.tanggal_pinjam;
+      const kembali = v.tanggal(req.body.tanggal_rencana_kembali, 'Rencana kembali')
+        ?? sekarang.tanggal_rencana_kembali;
+
+      if (kembali < pinjam) {
+        throw galatValidasi('Tanggal rencana kembali tidak boleh lebih awal dari tanggal pinjam.');
+      }
+
+      Object.assign(payload, {
+        jumlah,
+        tanggal_pinjam: pinjam,
+        tanggal_rencana_kembali: kembali,
+      });
+    }
+
+    if (Object.keys(payload).length === 0) throw galatValidasi('Tidak ada data yang diubah.');
+
+    const { data, error } = await supabaseAdmin
+      .from('peminjaman')
+      .update(payload)
+      .eq('id', id)
+      .select(`*, ${RELASI_ALAT}, ${RELASI_ADMIN}`)
+      .maybeSingle();
+
+    if (error) {
+      // Menaikkan jumlah pada peminjaman yang sedang menahan stok bisa
+      // melebihi unit yang tersedia; constraint database yang menahannya.
+      if (error.code === '23514') {
+        throw galatKonflik(
+          `Stok "${sekarang.alat?.nama_alat}" tidak mencukupi untuk jumlah sebanyak itu. ` +
+          'Periksa ketersediaannya lalu coba angka yang lebih kecil.'
+        );
+      }
+      throw error;
+    }
+    if (!data) throw galatTidakDitemukan('Data peminjaman tidak ditemukan.');
+
+    await catatAktivitas({
+      admin: req.admin,
+      aksi: 'Membetulkan data peminjaman',
+      keterangan:
+        `Membetulkan pengajuan ${data.kode_peminjaman} atas nama ${data.nama_peminjam} ` +
+        `(${Object.keys(payload).join(', ')})`,
+    });
+
+    res.json({ data, pesan: 'Data peminjaman berhasil dibetulkan.' });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // DELETE /api/peminjaman/:id — menghapus baris peminjaman (ADMIN)
 //

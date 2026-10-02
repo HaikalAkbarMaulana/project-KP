@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Check, X, PackageCheck, PackageOpen, Search, Download, Phone, AlertTriangle, Trash2,
-  MessageCircle, Plus,
+  MessageCircle, Plus, Pencil,
 } from 'lucide-react';
 
 import { api, keQuery } from '../../lib/api';
@@ -56,6 +56,9 @@ export default function DataPeminjaman() {
   const [akanDihapus, setAkanDihapus] = useState(null);
   const [formCatat, setFormCatat] = useState(false);
   const [pengembalian, setPengembalian] = useState(null);
+  const [sedangDibetulkan, setSedangDibetulkan] = useState(null);
+  const [dari, setDari] = useState('');
+  const [sampai, setSampai] = useState('');
   const [pesanSukses, setPesanSukses] = useState('');
   const [pesanUnduh, setPesanUnduh] = useState('');
   const [galatAksi, setGalatAksi] = useState('');
@@ -67,10 +70,12 @@ export default function DataPeminjaman() {
       status,
       terlambat: hanyaTerlambat ? '1' : '',
       q: kataKunci,
+      dari,
+      sampai,
       halaman,
       per_halaman: PER_HALAMAN,
     })}`,
-    [status, hanyaTerlambat, kataKunci, halaman]
+    [status, hanyaTerlambat, kataKunci, dari, sampai, halaman]
   );
 
   const { data, memuat, galat, muatUlang } = useAmbilData(path);
@@ -163,15 +168,41 @@ export default function DataPeminjaman() {
           </button>
         </div>
 
-        <div className="relative lg:w-72">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            value={pencarian}
-            onChange={(e) => { setPencarian(e.target.value); setHalaman(1); }}
-            placeholder="Cari nama guru atau kode..."
-            aria-label="Cari peminjaman"
-            className="input pl-9"
-          />
+        <div className="flex flex-col gap-2 sm:flex-row lg:w-auto">
+          <div className="relative lg:w-64">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              value={pencarian}
+              onChange={(e) => { setPencarian(e.target.value); setHalaman(1); }}
+              placeholder="Cari guru, alat, atau kode..."
+              aria-label="Cari peminjaman"
+              className="input pl-9"
+            />
+          </div>
+
+          <div className="flex items-center gap-1">
+            <input
+              type="date" value={dari} aria-label="Dipinjam dari tanggal"
+              onChange={(e) => { setDari(e.target.value); setHalaman(1); }}
+              className="input w-auto" title="Tanggal pinjam dari"
+            />
+            <span className="text-slate-400">–</span>
+            <input
+              type="date" value={sampai} min={dari} aria-label="Dipinjam sampai tanggal"
+              onChange={(e) => { setSampai(e.target.value); setHalaman(1); }}
+              className="input w-auto" title="Tanggal pinjam sampai"
+            />
+            {(dari || sampai) && (
+              <button
+                type="button"
+                onClick={() => { setDari(''); setSampai(''); setHalaman(1); }}
+                title="Kosongkan rentang tanggal"
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-ink-900"
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -210,6 +241,7 @@ export default function DataPeminjaman() {
                       else jalankanAksi(item, aksi);
                     }}
                     onHapus={() => setAkanDihapus(item)}
+                    onBetulkan={() => setSedangDibetulkan(item)}
                   />
                 ))}
               </tbody>
@@ -237,6 +269,16 @@ export default function DataPeminjaman() {
           )}
         </>
       )}
+
+      <FormBetulkan
+        item={sedangDibetulkan}
+        onTutup={() => setSedangDibetulkan(null)}
+        onSimpan={(pesan) => {
+          setSedangDibetulkan(null);
+          setPesanSukses(pesan);
+          muatUlang();
+        }}
+      />
 
       <DialogPengembalian
         item={pengembalian}
@@ -287,7 +329,7 @@ export default function DataPeminjaman() {
   );
 }
 
-function BarisPeminjaman({ item, onAksi, onHapus }) {
+function BarisPeminjaman({ item, onAksi, onHapus, onBetulkan }) {
   const sisa = sisaHari(item.tanggal_rencana_kembali);
   const terlambat = item.status === 'dipinjam' && sisa < 0;
   const aksi = AKSI_PER_STATUS[item.status] ?? [];
@@ -385,6 +427,16 @@ function BarisPeminjaman({ item, onAksi, onHapus }) {
             </button>
           ))}
 
+          <button
+            type="button"
+            onClick={onBetulkan}
+            title="Betulkan data pengajuan"
+            className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-brand-700"
+          >
+            <Pencil size={16} />
+            <span className="sr-only">Betulkan data pengajuan</span>
+          </button>
+
           {/* Baris yang sedang menahan stok tidak boleh dihapus: alatnya
               masih di tangan guru, dan menghapusnya akan membuat catatan
               stok menyatakan tersedia padahal tidak. */}
@@ -405,6 +457,142 @@ function BarisPeminjaman({ item, onAksi, onHapus }) {
         </div>
       </td>
     </tr>
+  );
+}
+
+/**
+ * Membetulkan data pengajuan yang salah ketik.
+ *
+ * Jumlah dan tanggal hanya bisa diubah selama peminjamannya masih
+ * berjalan — setelah dikembalikan, angkanya sudah terikat dengan catatan
+ * rusak/hilang. Alat yang dipinjam tidak bisa diganti sama sekali:
+ * menukar alat sama saja peminjaman yang berbeda.
+ */
+function FormBetulkan({ item, onTutup, onSimpan }) {
+  const [form, setForm] = useState({});
+  const [galat, setGalat] = useState('');
+  const [menyimpan, setMenyimpan] = useState(false);
+  const [idTerakhir, setIdTerakhir] = useState(null);
+
+  const penanda = item?.id ?? null;
+  if (penanda !== idTerakhir) {
+    setIdTerakhir(penanda);
+    setGalat('');
+    setForm(item ? {
+      nama_peminjam: item.nama_peminjam ?? '',
+      nip_peminjam: item.nip_peminjam ?? '',
+      mapel: item.mapel ?? '',
+      no_hp: item.no_hp ?? '',
+      keperluan: item.keperluan ?? '',
+      jumlah: item.jumlah ?? 1,
+      tanggal_pinjam: item.tanggal_pinjam ?? '',
+      tanggal_rencana_kembali: item.tanggal_rencana_kembali ?? '',
+    } : {});
+  }
+
+  if (!item) return <Modal terbuka={false} judul="" onTutup={onTutup} />;
+
+  const masihBerjalan = ['pending', 'disetujui', 'dipinjam'].includes(item.status);
+
+  function ubah(kunci) {
+    return (e) => setForm((f) => ({ ...f, [kunci]: e.target.value }));
+  }
+
+  async function simpan(e) {
+    e.preventDefault();
+    setGalat('');
+    setMenyimpan(true);
+
+    // Jumlah dan tanggal hanya dikirim bila memang masih boleh diubah,
+    // supaya backend tidak menolak permintaan yang sebenarnya cuma
+    // membetulkan nama.
+    const kirim = masihBerjalan ? { ...form, jumlah: Number(form.jumlah) } : {
+      nama_peminjam: form.nama_peminjam,
+      nip_peminjam: form.nip_peminjam,
+      mapel: form.mapel,
+      no_hp: form.no_hp,
+      keperluan: form.keperluan,
+    };
+
+    try {
+      const res = await api.put(`/peminjaman/${item.id}`, kirim);
+      onSimpan(res.pesan || 'Data diperbarui.');
+    } catch (err) {
+      setGalat(err.message);
+    } finally {
+      setMenyimpan(false);
+    }
+  }
+
+  return (
+    <Modal terbuka judul="Betulkan data pengajuan" onTutup={onTutup} lebar="max-w-2xl">
+      <form onSubmit={simpan} className="space-y-4">
+        <p className="text-sm text-slate-600">
+          <span className="font-mono text-xs">{item.kode_peminjaman}</span> ·{' '}
+          {item.alat?.nama_alat}
+        </p>
+
+        <PesanGalat pesan={galat} />
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <IsianCatat label="Nama peminjam" wajib>
+            <input required maxLength={120} value={form.nama_peminjam}
+              onChange={ubah('nama_peminjam')} className="input" />
+          </IsianCatat>
+          <IsianCatat label="Nomor HP" wajib>
+            <input required type="tel" maxLength={20} value={form.no_hp}
+              onChange={ubah('no_hp')} className="input" />
+          </IsianCatat>
+          <IsianCatat label="NIP / NUPTK">
+            <input maxLength={30} value={form.nip_peminjam}
+              onChange={ubah('nip_peminjam')} className="input" />
+          </IsianCatat>
+          <IsianCatat label="Mata pelajaran">
+            <input maxLength={80} value={form.mapel} onChange={ubah('mapel')} className="input" />
+          </IsianCatat>
+        </div>
+
+        <IsianCatat label="Keperluan" wajib>
+          <textarea required rows={2} maxLength={500} value={form.keperluan}
+            onChange={ubah('keperluan')} className="input" />
+        </IsianCatat>
+
+        {masihBerjalan ? (
+          <div className="grid gap-4 sm:grid-cols-3">
+            <IsianCatat label="Jumlah" wajib>
+              <input required type="number" min={1} value={form.jumlah}
+                onChange={ubah('jumlah')} className="input" />
+            </IsianCatat>
+            <IsianCatat label="Tanggal pinjam" wajib>
+              <input required type="date" value={form.tanggal_pinjam}
+                onChange={ubah('tanggal_pinjam')} className="input" />
+            </IsianCatat>
+            <IsianCatat label="Rencana kembali" wajib>
+              <input required type="date" min={form.tanggal_pinjam}
+                value={form.tanggal_rencana_kembali}
+                onChange={ubah('tanggal_rencana_kembali')} className="input" />
+            </IsianCatat>
+          </div>
+        ) : (
+          <p className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            Pengajuan ini sudah selesai, jadi jumlah dan tanggalnya terkunci —
+            keduanya sudah terikat dengan catatan pengembalian. Yang masih bisa
+            dibetulkan hanya identitas dan keperluan.
+          </p>
+        )}
+
+        <div className="flex justify-end gap-2 pt-1">
+          <button type="button" onClick={onTutup}
+            className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100">
+            Batal
+          </button>
+          <button type="submit" disabled={menyimpan}
+            className="rounded-xl bg-brand-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-50">
+            {menyimpan ? 'Menyimpan...' : 'Simpan perbaikan'}
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
