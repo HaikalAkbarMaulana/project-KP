@@ -11,7 +11,9 @@
     "dev": "nodemon src/index.js",
     "start": "node src/index.js",
     "buat-admin": "node scripts/buat-admin.js",
-    "ganti-sandi": "node scripts/ganti-sandi-admin.js"
+    "ganti-sandi": "node scripts/ganti-sandi-admin.js",
+    "ekspor-data": "node scripts/ekspor-data.js",
+    "ekspor-foto": "node scripts/ekspor-foto.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
