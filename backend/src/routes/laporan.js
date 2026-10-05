@@ -5,6 +5,7 @@ import { SEMUA_STATUS } from './peminjaman.js';
 import * as v from '../lib/validasi.js';
 import { galatValidasi } from '../lib/galat.js';
 import { susunCsv } from '../lib/csv.js';
+import { tanggalLokal } from '../lib/waktu.js';
 
 const router = Router();
 
@@ -18,7 +19,7 @@ const BATAS_BARIS = 10_000;
  * berantakan.
  */
 function kirimCsv(res, namaBerkas, isi) {
-  const stempel = new Date().toISOString().slice(0, 10);
+  const stempel = tanggalLokal();
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${namaBerkas}-${stempel}.csv"`);
   res.send(isi);

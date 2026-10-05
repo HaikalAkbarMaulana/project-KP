@@ -18,6 +18,13 @@ export function teks(nilai, label, { wajib = false, maks = 255, min = 1 } = {}) 
   }
   if (typeof nilai !== 'string') throw galatValidasi(`${label} harus berupa teks.`);
 
+  // PostgreSQL tidak bisa menyimpan byte NUL di kolom text sama sekali, jadi
+  // ini harus ditolak di sini. Kalau diteruskan, yang muncul di layar adalah
+  // "kesalahan server" — padahal sebabnya ada pada isian.
+  if (nilai.includes('\u0000')) {
+    throw galatValidasi(`${label} memuat karakter yang tidak bisa disimpan.`);
+  }
+
   const bersih = nilai.trim();
   if (wajib && bersih.length < min) throw galatValidasi(`${label} wajib diisi.`);
   if (bersih.length > maks) throw galatValidasi(`${label} maksimal ${maks} karakter.`);
@@ -74,6 +81,17 @@ export function tanggal(nilai, label, { wajib = false } = {}) {
 
   const waktu = new Date(`${teksTanggal}T00:00:00Z`);
   if (Number.isNaN(waktu.getTime())) throw galatValidasi(`${label} bukan tanggal yang benar.`);
+
+  // Memeriksa NaN saja tidak cukup. JavaScript menggulung hari yang kelebihan
+  // alih-alih menolaknya: "2027-02-31" diterima dan menjadi 3 Maret, lalu
+  // teks aslinya ("2027-02-31") diteruskan ke PostgreSQL yang menolaknya
+  // sebagai tanggal di luar jangkauan — pengguna hanya melihat "kesalahan
+  // server". Membandingkan hasil parse dengan teks asal menutup celah itu:
+  // bulan 13 dan hari 32 sudah tertangkap NaN, yang lolos justru 29-31
+  // Februari dan 31 di bulan berisi 30 hari.
+  if (waktu.toISOString().slice(0, 10) !== teksTanggal) {
+    throw galatValidasi(`${label} bukan tanggal yang benar.`);
+  }
   return teksTanggal;
 }
 

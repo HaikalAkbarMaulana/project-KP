@@ -3,7 +3,13 @@ import { supabaseAdmin } from '../supabaseClient.js';
 import { wajibAdmin, kenaliAdmin } from '../middleware/auth.js';
 import { catatAktivitas } from '../lib/log.js';
 import { hapusFotoAlat } from '../lib/penyimpanan.js';
-import { galatTidakDitemukan, galatValidasi, galatKonflik } from '../lib/galat.js';
+import {
+  galatTidakDitemukan,
+  galatValidasi,
+  galatKonflik,
+  karenaHalamanDiLuarJangkauan,
+  totalDariGalatJangkauan,
+} from '../lib/galat.js';
 import * as v from '../lib/validasi.js';
 
 const router = Router();
@@ -94,6 +100,16 @@ router.get('/', kenaliAdmin, async (req, res, next) => {
     if (ketersediaan === 'rusak') query = query.gt('jumlah_rusak', 0);
 
     const { data, error, count } = await query;
+
+    // Halaman yang diminta melewati jumlah data. Jawaban yang benar adalah
+    // daftar kosong beserta total sebenarnya, bukan error — biar tombol
+    // halaman di layar langsung menyesuaikan diri.
+    if (karenaHalamanDiLuarJangkauan(error)) {
+      return res.json({
+        data: [],
+        halaman: { nomor: halaman, per_halaman: perHalaman, total: totalDariGalatJangkauan(error) ?? 0 },
+      });
+    }
     if (error) throw error;
 
     res.json({

@@ -10,6 +10,8 @@ import {
   terjemahkanGalatDatabase,
   karenaDatabaseTakTerjangkau,
   PESAN_DATABASE_TAK_TERJANGKAU,
+  karenaDiblokirPerantara,
+  PESAN_DIBLOKIR_PERANTARA,
 } from './lib/galat.js';
 import { periksaSkema, statusSkema } from './lib/periksaSkema.js';
 
@@ -148,6 +150,14 @@ app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
   if (karenaDatabaseTakTerjangkau(err)) {
     console.warn(`[${req.method} ${req.originalUrl}] Supabase tidak terjangkau: ${err.message}`);
     return res.status(503).json({ pesan: PESAN_DATABASE_TAK_TERJANGKAU });
+  }
+
+  // Blokir oleh penyaring keamanan di depan Supabase. Balasannya halaman HTML,
+  // bukan JSON, jadi tanpa pemeriksaan ini pengguna melihat "kesalahan server"
+  // padahal yang perlu diubah adalah kata kuncinya.
+  if (karenaDiblokirPerantara(err)) {
+    console.warn(`[${req.method} ${req.originalUrl}] Diblokir penyaring keamanan di depan Supabase.`);
+    return res.status(400).json({ pesan: PESAN_DIBLOKIR_PERANTARA });
   }
 
   const terjemahan = terjemahkanGalatDatabase(err);

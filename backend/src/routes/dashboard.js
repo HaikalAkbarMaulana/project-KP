@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { supabaseAdmin } from '../supabaseClient.js';
 import { wajibAdmin } from '../middleware/auth.js';
 import { SEMUA_STATUS } from './peminjaman.js';
+import { tanggalLokal } from '../lib/waktu.js';
 
 const router = Router();
 
@@ -12,7 +13,7 @@ const BATAS_ALAT = 5000;
 const BATAS_PEMINJAMAN = 5000;
 
 function hariIni() {
-  return new Date().toISOString().slice(0, 10);
+  return tanggalLokal();
 }
 
 /** Daftar 6 bulan terakhir dalam bentuk { kunci: '2026-04', label: 'Apr 2026' }. */

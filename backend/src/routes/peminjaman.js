@@ -5,8 +5,16 @@ import { supabaseAdmin } from '../supabaseClient.js';
 import { wajibAdmin } from '../middleware/auth.js';
 import { pembatasLaju } from '../middleware/pembatasLaju.js';
 import { catatAktivitas } from '../lib/log.js';
-import { GalatAplikasi, galatTidakDitemukan, galatValidasi, galatKonflik } from '../lib/galat.js';
+import {
+  GalatAplikasi,
+  galatTidakDitemukan,
+  galatValidasi,
+  galatKonflik,
+  karenaHalamanDiLuarJangkauan,
+  totalDariGalatJangkauan,
+} from '../lib/galat.js';
 import * as v from '../lib/validasi.js';
+import { tanggalLokal, tanggalLokalGeser } from '../lib/waktu.js';
 
 const router = Router();
 
@@ -41,14 +49,14 @@ const RELASI_ADMIN = 'petugas:diproses_oleh(id, nama)';
 /** Kode acak yang tidak berurutan, supaya tidak mudah ditebak orang lain. */
 function buatKodePeminjaman() {
   const huruf = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // tanpa I, O, 0, 1 agar tidak salah baca
-  const tanggal = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const tanggal = tanggalLokal().replace(/-/g, '');
   let acak = '';
   for (let i = 0; i < 6; i += 1) acak += huruf[randomInt(huruf.length)];
   return `PJM-${tanggal}-${acak}`;
 }
 
 function hariIni() {
-  return new Date().toISOString().slice(0, 10);
+  return tanggalLokal();
 }
 
 // ------------------------------------------------------------
@@ -109,7 +117,7 @@ router.post('/', batasPengajuan, async (req, res, next) => {
 
     // Toleransi satu hari ke belakang supaya guru yang mengisi form
     // di malam hari untuk praktikum hari itu tidak tertolak.
-    const kemarin = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const kemarin = tanggalLokalGeser(-1);
     if (pengajuan.tanggal_pinjam < kemarin) {
       throw galatValidasi('Tanggal pinjam sudah lewat. Pilih tanggal hari ini atau setelahnya.');
     }
@@ -373,6 +381,15 @@ router.get('/', wajibAdmin, async (req, res, next) => {
     }
 
     const { data, error, count } = await query;
+
+    // Lihat catatan serupa di routes/alat.js: halaman di luar jangkauan
+    // dijawab daftar kosong, bukan error.
+    if (karenaHalamanDiLuarJangkauan(error)) {
+      return res.json({
+        data: [],
+        halaman: { nomor: halaman, per_halaman: perHalaman, total: totalDariGalatJangkauan(error) ?? 0 },
+      });
+    }
     if (error) throw error;
 
     res.json({ data, halaman: { nomor: halaman, per_halaman: perHalaman, total: count ?? 0 } });

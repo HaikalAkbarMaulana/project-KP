@@ -43,6 +43,56 @@ export function karenaDatabaseTakTerjangkau(error) {
   return RE_GANGGUAN_JARINGAN.test(teks);
 }
 
+export const PESAN_DIBLOKIR_PERANTARA =
+  'Permintaan ditolak oleh penyaring keamanan di depan database. Biasanya ini ' +
+  'terjadi karena kata yang dicari menyerupai perintah database. Coba ketik ' +
+  'kata kunci yang lebih sederhana.';
+
+/**
+ * Apakah balasan bukan berasal dari Supabase, melainkan dari penyaring
+ * keamanan (WAF) di depannya.
+ *
+ * Supabase berada di belakang Cloudflare. Teks pencarian ikut masuk ke
+ * query string PostgREST, jadi kata kunci yang menyerupai serangan SQL
+ * (misal "or 1=1 --") diblokir di tepi jaringan dengan halaman HTML 403 —
+ * permintaannya tidak pernah sampai ke database. postgrest-js menaruh HTML
+ * itu apa adanya di `error.message` tanpa `code`, sehingga tanpa pengenal
+ * ini ia berakhir sebagai "kesalahan server" yang menyesatkan.
+ *
+ * Catatan: ini BUKAN celah injeksi. Kata kunci selalu dikirim sebagai nilai
+ * parameter, dan yang menolak justru lapisan di luar aplikasi.
+ */
+export function karenaDiblokirPerantara(error) {
+  if (!error || error.code) return false;
+  const pesan = String(error.message || '').trimStart();
+  return pesan.startsWith('<');
+}
+
+/**
+ * Apakah nomor halaman yang diminta melewati jumlah baris yang ada.
+ *
+ * PostgREST membalas 416 (PGRST103) untuk ini. Kejadian wajar: petugas
+ * membuka halaman 3, lalu data terhapus sampai halaman 3 tidak ada lagi.
+ * Jawaban yang benar adalah daftar kosong, bukan error.
+ */
+export function karenaHalamanDiLuarJangkauan(error) {
+  return error?.code === 'PGRST103';
+}
+
+/**
+ * Jumlah baris sebenarnya, dibaca dari keterangan galat 416 PostgREST
+ * ("An offset of 1999600 was requested, but there are only 10 rows.").
+ *
+ * Dipakai supaya halaman di luar jangkauan tetap bisa melaporkan total yang
+ * benar, sehingga tombol halaman di layar langsung menyesuaikan diri.
+ * Mengembalikan null bila susunan pesannya berubah di versi PostgREST lain —
+ * pemanggil wajib menyiapkan jalan keluar untuk itu.
+ */
+export function totalDariGalatJangkauan(error) {
+  const cocok = /there are only (\d+) rows/i.exec(error?.details || '');
+  return cocok ? Number(cocok[1]) : null;
+}
+
 export const galatValidasi = (pesan) => new GalatAplikasi(pesan, 400);
 export const galatTidakDitemukan = (pesan = 'Data tidak ditemukan.') => new GalatAplikasi(pesan, 404);
 export const galatKonflik = (pesan) => new GalatAplikasi(pesan, 409);
