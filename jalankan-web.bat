@@ -49,12 +49,12 @@ echo  [OK] Backend sudah berjalan di port 4000.
 :lanjut_frontend
 
 rem ---- 4. Frontend ------------------------------------------------------
-rem  Dijalankan dalam mode jaringan (dev:hp) supaya satu kali nyala bisa
-rem  dibuka dari laptop ini maupun dari HP di Wi-Fi yang sama.
+rem  Satu kali nyala sudah bisa dibuka dari laptop ini maupun dari HP di
+rem  Wi-Fi yang sama, karena host jaringan sudah disetel di vite.config.js.
 call :port_aktif 5173
 if "%AKTIF%"=="1" goto frontend_sudah_jalan
 echo  [..] Menyalakan frontend di jendela baru...
-start "LabPinjam - Frontend" /d "%~dp0frontend" cmd /k npm run dev:hp
+start "LabPinjam - Frontend" /d "%~dp0frontend" cmd /k npm run dev
 goto tunggu_siap
 :frontend_sudah_jalan
 echo  [OK] Frontend sudah berjalan di port 5173.

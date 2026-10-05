@@ -139,8 +139,24 @@ npm install
 npm run dev
 ```
 
-Frontend berjalan di `http://127.0.0.1:5173`. Masuk sebagai admin lewat
-`/admin/masuk` (tautannya juga ada di footer halaman publik).
+`npm run dev` mencetak dua macam alamat sekaligus:
+
+```
+➜  Local:   http://localhost:5173/        <- dibuka di laptop ini
+➜  Network: http://10.62.39.188:5173/     <- dibuka dari HP di Wi-Fi yang sama
+```
+
+Alamat `Network` berubah setiap kali laptop berpindah Wi-Fi, jadi baca ulang dari
+terminal alih-alih menghafalnya. Bila muncul lebih dari satu baris `Network`,
+pakai yang seangka dengan Wi-Fi laptop (`192.168.56.x` biasanya milik
+VirtualBox/VMware dan tidak bisa dibuka dari HP).
+
+Masuk sebagai admin lewat `/admin/masuk` (tautannya juga ada di pojok kanan atas
+halaman publik).
+
+> `vite.config.js` hanya dibaca saat server dinyalakan. Setelah berkas itu
+> diubah, hentikan `npm run dev` dengan `Ctrl+C` lalu jalankan lagi — menyimpan
+> saja tidak cukup.
 
 ---
 
