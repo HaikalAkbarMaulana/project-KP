@@ -49,10 +49,12 @@ echo  [OK] Backend sudah berjalan di port 4000.
 :lanjut_frontend
 
 rem ---- 4. Frontend ------------------------------------------------------
+rem  Dijalankan dalam mode jaringan (dev:hp) supaya satu kali nyala bisa
+rem  dibuka dari laptop ini maupun dari HP di Wi-Fi yang sama.
 call :port_aktif 5173
 if "%AKTIF%"=="1" goto frontend_sudah_jalan
 echo  [..] Menyalakan frontend di jendela baru...
-start "LabPinjam - Frontend" /d "%~dp0frontend" cmd /k npm run dev
+start "LabPinjam - Frontend" /d "%~dp0frontend" cmd /k npm run dev:hp
 goto tunggu_siap
 :frontend_sudah_jalan
 echo  [OK] Frontend sudah berjalan di port 5173.
@@ -72,19 +74,55 @@ if %DETIK% geq 90 goto terlalu_lama
 goto tunggu
 
 :siap
+set ALAMAT=
+for /f "usebackq delims=" %%a in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\alamat-jaringan.ps1"`) do set ALAMAT=%%a
+call :mode_jaringan
+
 start "" "http://127.0.0.1:5173/"
 echo.
-echo  [OK] Aplikasi siap dan sudah dibuka di browser.
+echo  ==========================================================
+echo    Aplikasi siap. Browser di laptop sudah dibuka.
 echo.
-echo       Katalog alat : http://127.0.0.1:5173/
-echo       Panel admin  : http://127.0.0.1:5173/admin/masuk
+echo    Dari laptop ini :  http://127.0.0.1:5173/
+if "%JARINGAN%"=="0" goto tanpa_hp
+if "%ALAMAT%"=="" goto alamat_kosong
+echo    Dari HP         :  http://%ALAMAT%:5173/
+echo.
+echo    Panel admin     :  http://127.0.0.1:5173/admin/masuk
+echo  ==========================================================
+echo.
+echo  Agar bisa dibuka dari HP, pastikan HP tersambung ke Wi-Fi
+echo  yang sama dengan laptop ini.
+goto penutup
+
+:alamat_kosong
+echo    Dari HP         :  alamat jaringan tidak terbaca otomatis.
+echo                       Lihat baris "Network:" di jendela Frontend.
+echo  ==========================================================
+goto penutup
+
+:tanpa_hp
+echo    Dari HP         :  belum bisa - frontend sedang berjalan
+echo                       dalam mode laptop saja.
+echo                       Tutup jendela Frontend lalu klik file ini lagi.
+echo  ==========================================================
+
+:penutup
 echo.
 echo  Jendela "LabPinjam - Backend" dan "LabPinjam - Frontend" harus
 echo  tetap terbuka selama aplikasi dipakai. Untuk mematikan aplikasi,
 echo  tutup kedua jendela itu, atau klik dua kali hentikan-web.bat
 echo.
 echo  Jendela ini akan tertutup sendiri.
-"%SystemRoot%\System32\timeout.exe" /t 15 >nul
+"%SystemRoot%\System32\timeout.exe" /t 20 >nul
+exit /b 0
+
+rem ---- Fungsi: apakah frontend melayani jaringan, bukan laptop saja? ----
+rem  Mode jaringan terlihat dari alamat 0.0.0.0, sedangkan mode laptop saja
+rem  hanya mendengarkan di 127.0.0.1.
+:mode_jaringan
+set JARINGAN=0
+netstat -ano | findstr /C:"0.0.0.0:5173" | findstr /C:"LISTENING" >nul && set JARINGAN=1
 exit /b 0
 
 rem ---- Pesan kegagalan -------------------------------------------------
