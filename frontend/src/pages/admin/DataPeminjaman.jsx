@@ -88,6 +88,17 @@ export default function DataPeminjaman() {
     setHalaman(1);
   }
 
+  /**
+   * Menyalurkan satu aksi ke tempat yang tepat: sebagian perlu dialog dulu
+   * (alasan penolakan, rincian pengembalian), sisanya langsung dikirim.
+   * Dipakai bersama oleh tampilan kartu dan tampilan tabel.
+   */
+  function bukaAksi(item, aksi) {
+    if (aksi.mintaRincian) setPengembalian(item);
+    else if (aksi.mintaCatatan) setAksiTertunda({ item, aksi });
+    else jalankanAksi(item, aksi);
+  }
+
   async function jalankanAksi(item, aksi, catatan) {
     setGalatAksi('');
     try {
@@ -217,7 +228,31 @@ export default function DataPeminjaman() {
         />
       ) : (
         <>
-          <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+          {/* Tujuh kolom tidak muat di layar HP. Dulu tabelnya dipaksa selebar
+              900px di dalam kotak yang bisa digeser, akibatnya di HP kolom
+              Alat sampai Aksi terpotong dan petugas harus menggeser ke samping
+              untuk sekadar menyetujui satu pengajuan. Sekarang data yang sama
+              disusun sebagai kartu di layar sempit, dan tabel hanya dipakai
+              mulai lebar lg ke atas. Keduanya memanggil komponen isi yang
+              sama, jadi tidak ada tampilan yang ketinggalan saat diubah. */}
+          <div className="grid gap-3 lg:hidden">
+            {daftar.map((item) => (
+              <KartuPeminjaman
+                key={item.id}
+                item={item}
+                onAksi={(aksi) => bukaAksi(item, aksi)}
+                onHapus={() => setAkanDihapus(item)}
+                onBetulkan={() => setSedangDibetulkan(item)}
+              />
+            ))}
+          </div>
+
+          {/* min-w tetap dipertahankan: di laptop 1024px sidebar admin
+              memakan ~256px, dan tujuh kolom yang dipaksa muat di sisanya
+              akan berdesakan. Di lebar itu menggeser tabel ke samping masih
+              wajar — yang tidak wajar adalah melakukannya di layar HP, dan
+              layar HP kini memakai kartu. */}
+          <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm lg:block">
             <table className="w-full min-w-[900px] text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase text-slate-500">
                 <tr>
@@ -235,11 +270,7 @@ export default function DataPeminjaman() {
                   <BarisPeminjaman
                     key={item.id}
                     item={item}
-                    onAksi={(aksi) => {
-                      if (aksi.mintaRincian) setPengembalian(item);
-                      else if (aksi.mintaCatatan) setAksiTertunda({ item, aksi });
-                      else jalankanAksi(item, aksi);
-                    }}
+                    onAksi={(aksi) => bukaAksi(item, aksi)}
                     onHapus={() => setAkanDihapus(item)}
                     onBetulkan={() => setSedangDibetulkan(item)}
                   />
@@ -329,50 +360,227 @@ export default function DataPeminjaman() {
   );
 }
 
-function BarisPeminjaman({ item, onAksi, onHapus, onBetulkan }) {
+/** Keadaan turunan satu pengajuan. Dihitung sekali, dipakai kartu dan tabel. */
+function keadaanPengajuan(item) {
   const sisa = sisaHari(item.tanggal_rencana_kembali);
-  const terlambat = item.status === 'dipinjam' && sisa < 0;
-  const aksi = AKSI_PER_STATUS[item.status] ?? [];
+  return {
+    sisa,
+    terlambat: item.status === 'dipinjam' && sisa < 0,
+    aksi: AKSI_PER_STATUS[item.status] ?? [],
+    // Harus sama dengan aturan di backend dan di trigger database.
+    menahanStok: ['disetujui', 'dipinjam'].includes(item.status),
+    tautanWa: tautanWhatsApp(item),
+  };
+}
 
-  // Harus sama dengan aturan di backend dan di trigger database.
-  const menahanStok = ['disetujui', 'dipinjam'].includes(item.status);
-  const tautanWa = tautanWhatsApp(item);
+function IdentitasPeminjam({ item, tautanWa }) {
+  return (
+    <>
+      <p className="break-words font-medium text-ink-900">{item.nama_peminjam}</p>
+      <p className="break-words text-xs text-slate-400">
+        {[item.mapel, item.nip_peminjam].filter(Boolean).join(' · ') || '—'}
+      </p>
+      {item.no_hp && (
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+          <a
+            href={`tel:${item.no_hp.replace(/[^0-9+]/g, '')}`}
+            className="inline-flex items-center gap-1 text-xs text-brand-700 hover:underline"
+          >
+            <Phone size={11} /> {item.no_hp}
+          </a>
+
+          {/* Membuka WhatsApp dengan pesan sudah terisi sesuai statusnya.
+              Nomor HP-nya memang sudah terkumpul saat pengajuan, jadi
+              tidak perlu layanan pengirim pesan berbayar — petugas
+              tinggal menekan kirim. */}
+          {tautanWa && (
+            <a
+              href={tautanWa}
+              target="_blank"
+              rel="noreferrer"
+              title="Kirim pesan WhatsApp sesuai status pengajuan"
+              className="inline-flex items-center gap-1 rounded-md bg-brand-50 px-1.5 py-0.5 text-xs font-semibold text-brand-700 hover:bg-brand-100"
+            >
+              <MessageCircle size={11} /> WhatsApp
+            </a>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
+function LencanaStatus({ item }) {
+  return (
+    <span
+      className={`inline-block shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${STATUS_WARNA[item.status]}`}
+    >
+      {STATUS_LABEL[item.status]}
+    </span>
+  );
+}
+
+function CatatanSelisih({ item }) {
+  if (!(item.jumlah_kembali_rusak > 0 || item.jumlah_hilang > 0)) return null;
+  return (
+    <p className="mt-1 text-xs font-medium text-amber-600">
+      {[
+        item.jumlah_kembali_rusak > 0 ? `${item.jumlah_kembali_rusak} rusak` : null,
+        item.jumlah_hilang > 0 ? `${item.jumlah_hilang} hilang` : null,
+      ].filter(Boolean).join(', ')}
+    </p>
+  );
+}
+
+function Jadwal({ item, terlambat, sisa }) {
+  return (
+    <>
+      <p>{tanggalSingkat(item.tanggal_pinjam)} → {tanggalSingkat(item.tanggal_rencana_kembali)}</p>
+      {terlambat && (
+        <p className="text-xs font-semibold text-rose-600">Telat {Math.abs(sisa)} hari</p>
+      )}
+      {item.tanggal_kembali_aktual && (
+        <p className="text-xs text-slate-400">Kembali {tanggalSingkat(item.tanggal_kembali_aktual)}</p>
+      )}
+    </>
+  );
+}
+
+/**
+ * Tombol aksi satu pengajuan.
+ *
+ * Di tabel tombolnya cukup ikon karena kolomnya sempit dan ada tooltip.
+ * Di kartu HP tidak ada tooltip dan jari butuh sasaran yang lebih besar,
+ * jadi `berlabel` menampilkan teksnya sekalian.
+ */
+function TombolAksi({ aksi, menahanStok, onAksi, onHapus, onBetulkan, berlabel = false }) {
+  const kelasIkon = berlabel ? 'rounded-lg p-3' : 'rounded-lg p-2';
+
+  return (
+    <div className={`flex flex-wrap items-center gap-1 ${berlabel ? '' : 'justify-end'}`}>
+      {aksi.map((a) => (
+        <button
+          key={a.status}
+          type="button"
+          title={a.label}
+          onClick={() => onAksi(a)}
+          className={
+            berlabel
+              ? `inline-flex min-h-[40px] items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 ${a.gaya}`
+              : `rounded-lg p-2 text-slate-500 ${a.gaya}`
+          }
+        >
+          <a.ikon size={16} />
+          {berlabel ? a.label : <span className="sr-only">{a.label}</span>}
+        </button>
+      ))}
+
+      <div className={`flex gap-1 ${berlabel ? 'ml-auto' : ''}`}>
+        <button
+          type="button"
+          onClick={onBetulkan}
+          title="Betulkan data pengajuan"
+          className={`${kelasIkon} text-slate-400 hover:bg-slate-100 hover:text-brand-700`}
+        >
+          <Pencil size={16} />
+          <span className="sr-only">Betulkan data pengajuan</span>
+        </button>
+
+        {/* Baris yang sedang menahan stok tidak boleh dihapus: alatnya
+            masih di tangan guru, dan menghapusnya akan membuat catatan
+            stok menyatakan tersedia padahal tidak. */}
+        <button
+          type="button"
+          onClick={onHapus}
+          disabled={menahanStok}
+          title={
+            menahanStok
+              ? 'Catat pengembalian atau batalkan dulu sebelum menghapus'
+              : 'Hapus data peminjaman'
+          }
+          className={`${kelasIkon} text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-30`}
+        >
+          <Trash2 size={16} />
+          <span className="sr-only">Hapus data peminjaman</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Satu pengajuan sebagai kartu — dipakai di layar HP dan tablet sempit. */
+function KartuPeminjaman({ item, onAksi, onHapus, onBetulkan }) {
+  const { sisa, terlambat, aksi, menahanStok, tautanWa } = keadaanPengajuan(item);
+
+  return (
+    <article
+      className={`rounded-2xl border p-4 shadow-sm ${
+        terlambat ? 'border-rose-200 bg-rose-50/60' : 'border-slate-200 bg-white'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <p className="break-all font-mono text-xs text-slate-500">{item.kode_peminjaman}</p>
+        <LencanaStatus item={item} />
+      </div>
+
+      <div className="mt-2">
+        <IdentitasPeminjam item={item} tautanWa={tautanWa} />
+      </div>
+
+      <dl className="mt-3 space-y-2 border-t border-slate-100 pt-3 text-sm">
+        <div className="flex gap-3">
+          <dt className="w-14 shrink-0 text-xs uppercase tracking-wide text-slate-400">Alat</dt>
+          <dd className="min-w-0 flex-1">
+            <p className="break-words text-slate-700">
+              {item.alat?.nama_alat}
+              <span className="font-semibold text-ink-900"> · {item.jumlah} unit</span>
+            </p>
+            {item.keperluan && (
+              <p className="break-words text-xs text-slate-400">{item.keperluan}</p>
+            )}
+          </dd>
+        </div>
+
+        <div className="flex gap-3">
+          <dt className="w-14 shrink-0 text-xs uppercase tracking-wide text-slate-400">Jadwal</dt>
+          <dd className="min-w-0 flex-1 text-slate-600">
+            <Jadwal item={item} terlambat={terlambat} sisa={sisa} />
+            <CatatanSelisih item={item} />
+          </dd>
+        </div>
+
+        {item.catatan_admin && (
+          <div className="flex gap-3">
+            <dt className="w-14 shrink-0 text-xs uppercase tracking-wide text-slate-400">Catatan</dt>
+            <dd className="min-w-0 flex-1 break-words text-xs text-slate-500">{item.catatan_admin}</dd>
+          </div>
+        )}
+      </dl>
+
+      <div className="mt-3 border-t border-slate-100 pt-3">
+        <TombolAksi
+          aksi={aksi}
+          menahanStok={menahanStok}
+          onAksi={onAksi}
+          onHapus={onHapus}
+          onBetulkan={onBetulkan}
+          berlabel
+        />
+      </div>
+    </article>
+  );
+}
+
+/** Satu pengajuan sebagai baris tabel — dipakai mulai lebar lg ke atas. */
+function BarisPeminjaman({ item, onAksi, onHapus, onBetulkan }) {
+  const { sisa, terlambat, aksi, menahanStok, tautanWa } = keadaanPengajuan(item);
 
   return (
     <tr className={terlambat ? 'bg-rose-50/50' : 'hover:bg-slate-50'}>
       <td className="px-5 py-3 font-mono text-xs text-slate-500">{item.kode_peminjaman}</td>
 
       <td className="px-5 py-3">
-        <p className="font-medium text-ink-900">{item.nama_peminjam}</p>
-        <p className="text-xs text-slate-400">
-          {[item.mapel, item.nip_peminjam].filter(Boolean).join(' · ') || '—'}
-        </p>
-        {item.no_hp && (
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1">
-            <a
-              href={`tel:${item.no_hp.replace(/[^0-9+]/g, '')}`}
-              className="inline-flex items-center gap-1 text-xs text-brand-700 hover:underline"
-            >
-              <Phone size={11} /> {item.no_hp}
-            </a>
-
-            {/* Membuka WhatsApp dengan pesan sudah terisi sesuai statusnya.
-                Nomor HP-nya memang sudah terkumpul saat pengajuan, jadi
-                tidak perlu layanan pengirim pesan berbayar — petugas
-                tinggal menekan kirim. */}
-            {tautanWa && (
-              <a
-                href={tautanWa}
-                target="_blank"
-                rel="noreferrer"
-                title="Kirim pesan WhatsApp sesuai status pengajuan"
-                className="inline-flex items-center gap-1 rounded-md bg-brand-50 px-1.5 py-0.5 text-xs font-semibold text-brand-700 hover:bg-brand-100"
-              >
-                <MessageCircle size={11} /> WhatsApp
-              </a>
-            )}
-          </div>
-        )}
+        <IdentitasPeminjam item={item} tautanWa={tautanWa} />
       </td>
 
       <td className="px-5 py-3">
@@ -383,27 +591,12 @@ function BarisPeminjaman({ item, onAksi, onHapus, onBetulkan }) {
       <td className="px-5 py-3 text-center text-slate-600">{item.jumlah}</td>
 
       <td className="px-5 py-3 text-slate-600">
-        <p>{tanggalSingkat(item.tanggal_pinjam)} → {tanggalSingkat(item.tanggal_rencana_kembali)}</p>
-        {terlambat && (
-          <p className="text-xs font-semibold text-rose-600">Telat {Math.abs(sisa)} hari</p>
-        )}
-        {item.tanggal_kembali_aktual && (
-          <p className="text-xs text-slate-400">Kembali {tanggalSingkat(item.tanggal_kembali_aktual)}</p>
-        )}
+        <Jadwal item={item} terlambat={terlambat} sisa={sisa} />
       </td>
 
       <td className="px-5 py-3">
-        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${STATUS_WARNA[item.status]}`}>
-          {STATUS_LABEL[item.status]}
-        </span>
-        {(item.jumlah_kembali_rusak > 0 || item.jumlah_hilang > 0) && (
-          <p className="mt-1 text-xs font-medium text-amber-600">
-            {[
-              item.jumlah_kembali_rusak > 0 ? `${item.jumlah_kembali_rusak} rusak` : null,
-              item.jumlah_hilang > 0 ? `${item.jumlah_hilang} hilang` : null,
-            ].filter(Boolean).join(', ')}
-          </p>
-        )}
+        <LencanaStatus item={item} />
+        <CatatanSelisih item={item} />
 
         {item.catatan_admin && (
           <p className="mt-1 max-w-[180px] truncate text-xs text-slate-400" title={item.catatan_admin}>
@@ -413,48 +606,13 @@ function BarisPeminjaman({ item, onAksi, onHapus, onBetulkan }) {
       </td>
 
       <td className="px-5 py-3">
-        <div className="flex justify-end gap-1">
-          {aksi.map((a) => (
-            <button
-              key={a.status}
-              type="button"
-              title={a.label}
-              onClick={() => onAksi(a)}
-              className={`rounded-lg p-2 text-slate-500 ${a.gaya}`}
-            >
-              <a.ikon size={16} />
-              <span className="sr-only">{a.label}</span>
-            </button>
-          ))}
-
-          <button
-            type="button"
-            onClick={onBetulkan}
-            title="Betulkan data pengajuan"
-            className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-brand-700"
-          >
-            <Pencil size={16} />
-            <span className="sr-only">Betulkan data pengajuan</span>
-          </button>
-
-          {/* Baris yang sedang menahan stok tidak boleh dihapus: alatnya
-              masih di tangan guru, dan menghapusnya akan membuat catatan
-              stok menyatakan tersedia padahal tidak. */}
-          <button
-            type="button"
-            onClick={onHapus}
-            disabled={menahanStok}
-            title={
-              menahanStok
-                ? 'Catat pengembalian atau batalkan dulu sebelum menghapus'
-                : 'Hapus data peminjaman'
-            }
-            className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-30"
-          >
-            <Trash2 size={16} />
-            <span className="sr-only">Hapus data peminjaman</span>
-          </button>
-        </div>
+        <TombolAksi
+          aksi={aksi}
+          menahanStok={menahanStok}
+          onAksi={onAksi}
+          onHapus={onHapus}
+          onBetulkan={onBetulkan}
+        />
       </td>
     </tr>
   );
