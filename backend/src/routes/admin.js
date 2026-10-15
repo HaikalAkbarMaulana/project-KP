@@ -20,12 +20,17 @@ router.get('/saya', wajibAdmin, (req, res) => {
   res.json({ data: req.admin });
 });
 
-// GET /api/admin/pengguna — daftar akun pengelola
+// GET /api/admin/pengguna — daftar akun petugas lab
+//
+// Disaring ke peran 'admin' dengan sengaja: sejak akun guru ada, tabel
+// profil memuat keduanya. Tanpa saringan ini halaman Akun Admin akan
+// ikut menampilkan puluhan guru. Guru dikelola di /api/admin/guru.
 router.get('/pengguna', wajibAdmin, async (req, res, next) => {
   try {
     const { data, error } = await supabaseAdmin
       .from('profil')
       .select('id, nama, email, no_hp, jabatan, aktif, dibuat_pada')
+      .eq('peran', 'admin')
       .order('nama');
 
     if (error) throw error;
@@ -71,7 +76,10 @@ router.post('/pengguna', wajibAdmin, async (req, res, next) => {
 
     const { data, error } = await supabaseAdmin
       .from('profil')
-      .insert({ id: userBaru.user.id, nama, email, jabatan, no_hp: noHp, aktif: true })
+      // peran disetel tegas. Bawaan kolomnya 'guru', jadi menghilangkannya
+      // di sini akan diam-diam membuat petugas lab baru tidak bisa masuk
+      // panel admin.
+      .insert({ id: userBaru.user.id, nama, email, jabatan, no_hp: noHp, aktif: true, peran: 'admin' })
       .select('id, nama, email, no_hp, jabatan, aktif, dibuat_pada')
       .single();
 
@@ -119,6 +127,10 @@ router.patch('/pengguna/:id', wajibAdmin, async (req, res, next) => {
       .from('profil')
       .update(payload)
       .eq('id', id)
+      // Endpoint ini khusus petugas lab. Tanpa saringan peran, id milik
+      // guru yang dikirim ke sini akan ikut terubah lewat halaman Akun
+      // Admin — guru dikelola di /api/admin/guru.
+      .eq('peran', 'admin')
       .select('id, nama, email, no_hp, jabatan, aktif, dibuat_pada')
       .maybeSingle();
 
@@ -148,7 +160,7 @@ router.delete('/pengguna/:id', wajibAdmin, async (req, res, next) => {
     await pastikanBukanAdminAktifTerakhir(id);
 
     const { data: target, error: errAmbil } = await supabaseAdmin
-      .from('profil').select('nama, email').eq('id', id).maybeSingle();
+      .from('profil').select('nama, email').eq('id', id).eq('peran', 'admin').maybeSingle();
 
     if (errAmbil) throw errAmbil;
     if (!target) throw galatTidakDitemukan('Akun admin tidak ditemukan.');
@@ -185,6 +197,10 @@ async function pastikanBukanAdminAktifTerakhir(id) {
     .from('profil')
     .select('id', { count: 'exact', head: true })
     .eq('aktif', true)
+    // Saringan peran WAJIB ada. Tanpa itu, puluhan guru aktif ikut
+    // terhitung sebagai "admin lain", sehingga admin terakhir bisa
+    // dihapus dan panel admin terkunci untuk semua orang.
+    .eq('peran', 'admin')
     .neq('id', id);
 
   if (error) throw error;

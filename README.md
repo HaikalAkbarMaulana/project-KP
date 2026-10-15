@@ -3,9 +3,10 @@
 Aplikasi pendataan inventaris lab komputer & IPA untuk SMP, lengkap dengan alur
 peminjaman alat oleh guru.
 
-**Login hanya untuk admin/petugas lab.** Guru tidak perlu membuat akun: mereka
-melihat katalog dan mengajukan peminjaman lewat halaman publik, lalu memantau
-statusnya memakai kode pengajuan.
+**Guru dan petugas lab sama-sama punya akun.** Guru masuk memakai **NIP**
+(kata sandi awalnya NIP sendiri, wajib diganti saat pertama masuk), petugas lab
+memakai email. Keduanya lewat satu halaman `/masuk`. Katalog alat tetap terbuka
+untuk umum; yang menuntut akun hanya pengajuan peminjamannya.
 
 **Stack:** React + Vite + Tailwind CSS (frontend) · Node.js + Express (backend API) ·
 Supabase/PostgreSQL (database & autentikasi)
@@ -17,8 +18,12 @@ Supabase/PostgreSQL (database & autentikasi)
 | Siapa | Bisa apa | Perlu akun? |
 | --- | --- | --- |
 | **Siapa saja** | Melihat katalog alat, stok, dan ketersediaan di `/` | Tidak |
-| **Guru** | Mengajukan peminjaman dari halaman detail alat; melacak status di `/lacak` dengan kode `PJM-…` | Tidak |
-| **Admin / petugas lab** | Seluruh panel `/admin`: dashboard, inventaris, persetujuan peminjaman, ruangan, kategori, akun admin | Ya |
+| **Guru** | Mengajukan peminjaman dari halaman detail alat, lalu memantau & membatalkannya di `/guru/peminjaman` | Ya — masuk dengan NIP |
+| **Admin / petugas lab** | Seluruh panel `/admin`: dashboard, inventaris, persetujuan peminjaman, ruangan, kategori, akun admin & guru | Ya — masuk dengan email |
+
+Akun guru **tidak** didaftarkan sendiri oleh gurunya: petugas lab yang
+membuatkannya. Tidak ada email sama sekali dalam alurnya — lupa kata sandi
+diselesaikan dengan reset oleh petugas lab, bukan lewat surel.
 
 Alur satu peminjaman:
 
@@ -105,6 +110,21 @@ npm run dev
 
 Isi `SUPABASE_URL` dan `SUPABASE_SERVICE_ROLE_KEY` di `.env` sebelum menjalankan —
 server menolak start bila keduanya kosong. Backend berjalan di `http://localhost:4000`.
+
+### Mendaftarkan guru
+
+```bash
+cd backend
+npm run buat-guru
+```
+
+Skrip menanyakan NIP, nama, mata pelajaran, dan nomor HP. Kata sandi awalnya
+NIP itu sendiri, dan akunnya ditandai wajib berganti kata sandi saat pertama
+kali masuk — NIP tercetak di dokumen kepegawaian dan ikut tampil di daftar
+peminjaman, jadi ia tidak boleh bertahan sebagai kata sandi.
+
+Guru tanpa NIP resmi tetap bisa didaftarkan: isi NUPTK, atau nomor lain yang
+ditetapkan sekolah, minimal 6 karakter.
 
 ### Membuat akun admin pertama
 

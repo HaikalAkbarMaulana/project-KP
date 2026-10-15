@@ -21,6 +21,8 @@ import referensiRoutes from './routes/referensi.js';
 import dashboardRoutes from './routes/dashboard.js';
 import laporanRoutes from './routes/laporan.js';
 import adminRoutes from './routes/admin.js';
+import guruRoutes from './routes/guru.js';
+import akunRoutes from './routes/akun.js';
 
 dotenv.config();
 
@@ -129,6 +131,10 @@ app.use('/api/peminjaman', peminjamanRoutes);
 app.use('/api', referensiRoutes); // -> /api/ruangan, /api/kategori
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/laporan', laporanRoutes);
+app.use('/api/akun', akunRoutes);
+// Didaftarkan SEBELUM adminRoutes supaya /api/admin/guru tidak
+// tertangkap rute lain di dalam adminRoutes.
+app.use('/api/admin/guru', guruRoutes);
 app.use('/api/admin', adminRoutes);
 
 app.use((req, res) => {

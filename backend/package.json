@@ -13,7 +13,8 @@
     "buat-admin": "node scripts/buat-admin.js",
     "ganti-sandi": "node scripts/ganti-sandi-admin.js",
     "ekspor-data": "node scripts/ekspor-data.js",
-    "ekspor-foto": "node scripts/ekspor-foto.js"
+    "ekspor-foto": "node scripts/ekspor-foto.js",
+    "buat-guru": "node scripts/buat-guru.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",

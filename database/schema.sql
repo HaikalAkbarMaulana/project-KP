@@ -25,13 +25,38 @@ create table if not exists public.profil (
   no_hp text,
   jabatan text,                              -- contoh: 'Kepala Lab IPA', 'Petugas Lab Komputer'
   aktif boolean not null default true,       -- nonaktifkan tanpa menghapus riwayat
-  dibuat_pada timestamptz not null default now()
+  dibuat_pada timestamptz not null default now(),
+
+  -- Bawaannya 'guru' dengan sengaja: kelalaian menyetel peran saat
+  -- menyisipkan baris tidak boleh berakhir sebagai admin baru.
+  peran text not null default 'guru',
+
+  -- NIP sekaligus nama pengguna bagi guru; admin masuk memakai email,
+  -- jadi kolom ini kosong untuk mereka. Supabase Auth mewajibkan email,
+  -- maka backend menyusun email internal <nip>@guru.lokal yang tidak
+  -- pernah ditampilkan dan tidak pernah dikirimi surat.
+  nip text,
+  mapel text,
+
+  -- Kata sandi awal guru adalah NIP-nya sendiri supaya gampang dibagikan
+  -- tanpa email. NIP bukan rahasia — ia tercetak di dokumen kepegawaian
+  -- dan ikut tampil di daftar peminjaman — jadi akun dipaksa berganti
+  -- sandi saat pertama kali masuk.
+  harus_ganti_sandi boolean not null default false,
+
+  constraint cek_peran check (peran in ('admin', 'guru')),
+  constraint cek_nip_guru check (peran <> 'guru' or nip is not null)
 );
 
+-- NIP wajib unik bila diisi, tapi banyak admin boleh sama-sama kosong.
+create unique index if not exists idx_profil_nip on public.profil(nip) where nip is not null;
+
 comment on table public.profil is
-  'Akun admin/petugas lab. Hanya pemilik baris di tabel ini yang boleh masuk ke panel admin.';
+  'Akun aplikasi. peran = admin (petugas lab, masuk dengan email) atau guru (masuk dengan NIP).';
 comment on column public.profil.aktif is
   'Set false untuk mencabut akses tanpa menghapus jejak aktivitasnya.';
+comment on column public.profil.nip is
+  'Nama pengguna guru. Untuk guru tanpa NIP, isi NUPTK atau nomor lain yang ditetapkan sekolah.';
 
 -- ------------------------------------------------------------
 -- 2. RUANGAN — lokasi penyimpanan alat
@@ -111,10 +136,19 @@ create table if not exists public.peminjaman (
   id uuid primary key default gen_random_uuid(),
   kode_peminjaman text unique not null,      -- sekaligus kode untuk melacak status
 
+  -- Identitas peminjam disalin ke sini saat pengajuan dibuat, bukan cuma
+  -- diacu lewat guru_id. Dengan begitu riwayat tetap utuh walau akunnya
+  -- kelak dihapus, dan peminjaman yang dicatat petugas lab atas nama guru
+  -- tanpa akun tetap punya identitas lengkap.
   nama_peminjam text not null,
   nip_peminjam text,
   mapel text,
   no_hp text not null,
+
+  -- Kosong bila dicatat petugas lab atas nama guru yang tidak punya akun.
+  -- 'on delete set null', bukan cascade: menghapus akun guru tidak boleh
+  -- ikut menyeret riwayat peminjamannya (lihat catatan di migrasi 001).
+  guru_id uuid references public.profil(id) on delete set null,
 
   alat_id uuid not null references public.alat(id) on delete restrict,
   jumlah integer not null check (jumlah > 0),
@@ -315,7 +349,7 @@ set search_path = public
 as $fn$
   select exists (
     select 1 from public.profil p
-     where p.id = auth.uid() and p.aktif
+     where p.id = auth.uid() and p.aktif and p.peran = 'admin'
   );
 $fn$;
 
@@ -387,8 +421,13 @@ create policy "profil_baca_admin" on public.profil for select to authenticated
 -- Peminjaman & log: hanya bisa dibaca admin, dan tidak ada kebijakan tulis
 -- sama sekali — semua penulisan harus lewat backend yang sudah memvalidasi.
 -- Data peminjaman memuat nama dan nomor HP guru, jadi jangan dibuka publik.
+-- Guru hanya boleh melihat riwayat peminjamannya sendiri, bukan milik
+-- orang lain. Dua kebijakan select pada satu tabel bersifat ATAU, jadi
+-- admin tetap melihat semuanya lewat kebijakan di atas.
 create policy "peminjaman_baca_admin" on public.peminjaman for select to authenticated
   using (public.adalah_admin());
+create policy "peminjaman_baca_sendiri" on public.peminjaman for select to authenticated
+  using (guru_id = auth.uid());
 create policy "log_baca_admin" on public.log_aktivitas for select to authenticated
   using (public.adalah_admin());
 

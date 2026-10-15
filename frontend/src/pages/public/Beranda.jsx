@@ -70,8 +70,8 @@ export default function Beranda() {
               Cek ketersediaan alat lab, lalu ajukan peminjaman
             </h1>
             <p className="mt-3 max-w-lg text-sm text-slate-300 sm:text-base">
-              Bapak/Ibu guru bisa langsung mengajukan peminjaman dari halaman ini —
-              tanpa perlu membuat akun. Petugas lab yang akan meninjau pengajuannya.
+              Katalog ini terbuka untuk siapa saja. Bapak/Ibu guru dapat mengajukan
+              peminjaman setelah masuk dengan NIP — petugas lab yang akan meninjaunya.
             </p>
 
             {/* Ringkasan isi katalog. Baru ditampilkan setelah datanya tiba

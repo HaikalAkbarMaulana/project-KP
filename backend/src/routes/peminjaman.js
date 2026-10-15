@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { randomInt } from 'node:crypto';
 
 import { supabaseAdmin } from '../supabaseClient.js';
-import { wajibAdmin } from '../middleware/auth.js';
+import { wajibAdmin, wajibGuru } from '../middleware/auth.js';
 import { pembatasLaju } from '../middleware/pembatasLaju.js';
 import { catatAktivitas } from '../lib/log.js';
 import {
@@ -60,25 +60,22 @@ function hariIni() {
 }
 
 // ------------------------------------------------------------
-// ENDPOINT PUBLIK
+// PENGAJUAN OLEH GURU
 // ------------------------------------------------------------
 
-// Guru mengajukan tanpa akun, jadi endpoint ini terbuka. Batasnya
-// diperketat supaya tidak gampang dibanjiri pengajuan iseng.
+// Pengajuan sekarang menuntut akun guru, jadi pembanjiran dari orang luar
+// tidak mungkin lagi. Batas ini tinggal menahan penyalahgunaan oleh akun
+// yang sah — baik karena iseng maupun karena tombol tertekan berulang —
+// sehingga bisa jauh lebih longgar daripada saat formulirnya terbuka.
 const batasPengajuan = pembatasLaju({
   jendelaMs: 60 * 60 * 1000,
-  maks: 10,
-  pesan: 'Terlalu banyak pengajuan dari perangkat ini. Coba lagi satu jam berikutnya, atau hubungi petugas lab.',
+  maks: 30,
+  pesan: 'Terlalu banyak pengajuan dalam satu jam. Coba lagi nanti, atau hubungi petugas lab.',
 });
 
-// POST /api/peminjaman — pengajuan peminjaman oleh guru (PUBLIK)
-/** Membaca dan memvalidasi isian peminjaman, dipakai form publik maupun admin. */
-function bacaIsianPeminjaman(body) {
-  const pengajuan = {
-    nama_peminjam: v.teks(body.nama_peminjam, 'Nama peminjam', { wajib: true, maks: 120 }),
-    nip_peminjam: v.teks(body.nip_peminjam, 'NIP / NUPTK', { maks: 30 }),
-    mapel: v.teks(body.mapel, 'Mata pelajaran', { maks: 80 }),
-    no_hp: v.nomorHp(body.no_hp, 'Nomor HP', { wajib: true }),
+/** Bagian isian yang sama untuk pengajuan guru maupun catatan petugas lab. */
+function bacaRincianPinjam(body) {
+  const rincian = {
     alat_id: v.uuid(body.alat_id, 'Alat', { wajib: true }),
     jumlah: v.bilangan(body.jumlah, 'Jumlah', { wajib: true, min: 1, maks: 1000 }),
     keperluan: v.teks(body.keperluan, 'Keperluan', { wajib: true, maks: 500 }),
@@ -86,10 +83,51 @@ function bacaIsianPeminjaman(body) {
     tanggal_rencana_kembali: v.tanggal(body.tanggal_rencana_kembali, 'Rencana kembali', { wajib: true }),
   };
 
-  if (pengajuan.tanggal_rencana_kembali < pengajuan.tanggal_pinjam) {
+  if (rincian.tanggal_rencana_kembali < rincian.tanggal_pinjam) {
     throw galatValidasi('Tanggal rencana kembali tidak boleh lebih awal dari tanggal pinjam.');
   }
-  return pengajuan;
+  return rincian;
+}
+
+/**
+ * Isian lengkap untuk catatan petugas lab, termasuk identitas peminjam.
+ *
+ * Hanya dipakai endpoint /catat: di sanalah petugas mencatat atas nama
+ * guru yang datang langsung, termasuk guru yang belum punya akun.
+ */
+function bacaIsianPeminjaman(body) {
+  return {
+    nama_peminjam: v.teks(body.nama_peminjam, 'Nama peminjam', { wajib: true, maks: 120 }),
+    nip_peminjam: v.teks(body.nip_peminjam, 'NIP / NUPTK', { maks: 30 }),
+    mapel: v.teks(body.mapel, 'Mata pelajaran', { maks: 80 }),
+    no_hp: v.nomorHp(body.no_hp, 'Nomor HP', { wajib: true }),
+    ...bacaRincianPinjam(body),
+  };
+}
+
+/**
+ * Isian pengajuan guru. Identitasnya diambil dari sesi, BUKAN dari badan
+ * permintaan — itu yang membuat satu guru tidak bisa mengajukan atas nama
+ * guru lain sekalipun ia menyusun permintaannya sendiri. Nomor HP boleh
+ * ditimpa karena guru kadang memakai nomor lain untuk dihubungi.
+ */
+function bacaPengajuanGuru(body, guru) {
+  // Nomor HP wajib ada di database. Kalau profil guru belum memuatnya dan
+  // isiannya juga kosong, tolak di sini — kalau diteruskan, yang muncul
+  // adalah galat database yang tidak memberi tahu apa yang harus dilakukan.
+  const noHp = v.nomorHp(body.no_hp, 'Nomor HP') ?? guru.no_hp;
+  if (!noHp) {
+    throw galatValidasi('Nomor HP belum terisi. Isi nomor HP yang bisa dihubungi petugas lab.');
+  }
+
+  return {
+    nama_peminjam: guru.nama,
+    nip_peminjam: guru.nip,
+    mapel: v.teks(body.mapel, 'Mata pelajaran', { maks: 80 }) ?? guru.mapel,
+    no_hp: noHp,
+    guru_id: guru.id,
+    ...bacaRincianPinjam(body),
+  };
 }
 
 /** Mengambil alat sekaligus memastikan ia memang boleh dan cukup untuk dipinjam. */
@@ -111,9 +149,10 @@ async function ambilAlatSiapPinjam(alatId, jumlah) {
   return alat;
 }
 
-router.post('/', batasPengajuan, async (req, res, next) => {
+// POST /api/peminjaman — pengajuan oleh guru yang sudah masuk (GURU)
+router.post('/', wajibGuru, batasPengajuan, async (req, res, next) => {
   try {
-    const pengajuan = bacaIsianPeminjaman(req.body);
+    const pengajuan = bacaPengajuanGuru(req.body, req.pengguna);
 
     // Toleransi satu hari ke belakang supaya guru yang mengisi form
     // di malam hari untuk praktikum hari itu tidak tertolak.
@@ -138,8 +177,88 @@ router.post('/', batasPengajuan, async (req, res, next) => {
 
     res.status(201).json({
       data: { kode_peminjaman: data.kode_peminjaman, status: data.status },
-      pesan: 'Pengajuan terkirim. Simpan kode di bawah ini untuk melacak statusnya.',
+      pesan: 'Pengajuan terkirim. Statusnya bisa dipantau di halaman Peminjaman Saya.',
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/peminjaman/saya — riwayat peminjaman guru yang sedang masuk (GURU)
+//
+// Harus didaftarkan sebelum rute ber-parameter mana pun, kalau tidak
+// "saya" akan tertangkap sebagai :id dan gagal sebagai UUID tak sah.
+router.get('/saya', wajibGuru, async (req, res, next) => {
+  try {
+    const status = v.pilihan(req.query.status, 'Status', SEMUA_STATUS);
+
+    let query = supabaseAdmin
+      .from('peminjaman')
+      .select(`
+        id, kode_peminjaman, jumlah, keperluan, status, catatan_admin,
+        tanggal_pinjam, tanggal_rencana_kembali, tanggal_kembali_aktual,
+        jumlah_kembali_rusak, jumlah_hilang, dibuat_pada,
+        ${RELASI_ALAT}
+      `)
+      .eq('guru_id', req.pengguna.id)
+      .order('dibuat_pada', { ascending: false })
+      .limit(100);
+
+    if (status) query = query.eq('status', status);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    res.json({ data });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/peminjaman/saya/:id/batal — guru membatalkan pengajuannya sendiri (GURU)
+//
+// Tidak perlu 4 digit nomor HP seperti pembatalan lewat kode: kepemilikan
+// sudah dibuktikan sesi, dan syarat guru_id di bawah memastikan satu guru
+// tidak bisa membatalkan milik guru lain sekalipun id-nya ditebak.
+router.post('/saya/:id/batal', wajibGuru, async (req, res, next) => {
+  try {
+    const id = v.uuid(req.params.id, 'ID pengajuan', { wajib: true });
+
+    const { data: pengajuan, error: errAmbil } = await supabaseAdmin
+      .from('peminjaman')
+      .select('id, status, kode_peminjaman, alat:alat_id(nama_alat)')
+      .eq('id', id)
+      .eq('guru_id', req.pengguna.id)
+      .maybeSingle();
+
+    if (errAmbil) throw errAmbil;
+    if (!pengajuan) throw galatTidakDitemukan('Pengajuan tidak ditemukan.');
+
+    // Setelah disetujui, stoknya sudah ditahan dan alatnya mungkin sudah
+    // disiapkan petugas. Pembatalan di tahap itu harus lewat petugas lab
+    // supaya mereka tahu dan bisa mengembalikan alatnya ke rak.
+    if (pengajuan.status !== 'pending') {
+      throw galatKonflik(
+        `Pengajuan ini sudah berstatus "${pengajuan.status}" sehingga tidak bisa ` +
+        'dibatalkan sendiri. Hubungi petugas lab.'
+      );
+    }
+
+    const { error } = await supabaseAdmin
+      .from('peminjaman')
+      .update({ status: 'dibatalkan' })
+      .eq('id', id)
+      .eq('guru_id', req.pengguna.id)
+      .eq('status', 'pending');
+    if (error) throw error;
+
+    await catatAktivitas({
+      admin: null,
+      aksi: 'Pembatalan oleh guru',
+      keterangan: `${req.pengguna.nama} membatalkan ${pengajuan.kode_peminjaman}`,
+    });
+
+    res.json({ pesan: 'Pengajuan berhasil dibatalkan.' });
   } catch (err) {
     next(err);
   }

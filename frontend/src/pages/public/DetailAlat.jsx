@@ -1,15 +1,18 @@
 import { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { MapPin, Boxes, ArrowLeft, PackageSearch, Copy, Check, Info } from 'lucide-react';
+import { useParams, Link, useLocation } from 'react-router-dom';
+import { MapPin, Boxes, ArrowLeft, PackageSearch, Copy, Check, Info, LogIn } from 'lucide-react';
 
 import { api } from '../../lib/api';
 import { useAmbilData } from '../../hooks/useAmbilData';
 import { tanggalHariIni } from '../../lib/format';
+import { useAuth } from '../../context/AuthContext';
 import { Memuat, PesanGalat } from '../../components/Keadaan';
 
+// Nama dan NIP tidak lagi ada di sini: keduanya diambil dari akun yang
+// sedang masuk, supaya satu guru tidak bisa mengajukan atas nama guru
+// lain. Mapel dan nomor HP tetap bisa diubah karena kadang berbeda untuk
+// peminjaman tertentu.
 const FORM_KOSONG = {
-  nama_peminjam: '',
-  nip_peminjam: '',
   mapel: '',
   no_hp: '',
   jumlah: 1,
@@ -96,12 +99,33 @@ function Rincian({ label, nilai }) {
 }
 
 function FormPengajuan({ alat }) {
-  const [form, setForm] = useState(FORM_KOSONG);
+  const { pengguna, adalahGuru, memuat: memuatSesi } = useAuth();
+  const lokasi = useLocation();
+
+  const [form, setForm] = useState(() => ({
+    ...FORM_KOSONG,
+    mapel: pengguna?.mapel ?? '',
+    no_hp: pengguna?.no_hp ?? '',
+  }));
   const [galat, setGalat] = useState('');
   const [mengirim, setMengirim] = useState(false);
   const [kodeBerhasil, setKodeBerhasil] = useState('');
 
   const bisaDipinjam = alat.boleh_dipinjam && alat.jumlah_tersedia > 0;
+
+  if (memuatSesi) return null;
+
+  // Pengajuan sekarang menuntut akun guru. Petugas lab yang membuka
+  // halaman ini diarahkan ke menu Catat Peminjaman, bukan disuruh keluar
+  // lalu masuk lagi sebagai guru.
+  if (!adalahGuru) {
+    return (
+      <AjakanMasuk
+        pengguna={pengguna}
+        tujuan={lokasi.pathname}
+      />
+    );
+  }
 
   function ubah(kunci) {
     return (e) => setForm((f) => ({ ...f, [kunci]: e.target.value }));
@@ -119,7 +143,9 @@ function FormPengajuan({ alat }) {
         jumlah: Number(form.jumlah),
       });
       setKodeBerhasil(res.data.kode_peminjaman);
-      setForm(FORM_KOSONG);
+      // Mapel dan nomor HP dibiarkan terisi: keduanya milik orang yang
+      // sama, dan mengosongkannya hanya menyusahkan saat mengajukan lagi.
+      setForm((f) => ({ ...FORM_KOSONG, mapel: f.mapel, no_hp: f.no_hp }));
       // Data alat sengaja tidak dimuat ulang di sini: pengajuan yang baru
       // masuk belum menahan stok sama sekali — stok baru berkurang ketika
       // petugas lab menyetujuinya. Jadi angkanya memang tidak berubah.
@@ -138,8 +164,9 @@ function FormPengajuan({ alat }) {
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
       <h2 className="font-display text-lg font-bold text-ink-900">Ajukan Peminjaman</h2>
       <p className="mt-1 text-sm text-slate-500">
-        Isi data di bawah ini. Tidak perlu membuat akun — setelah terkirim Anda akan
-        mendapat kode untuk melacak statusnya.
+        Mengajukan sebagai <span className="font-medium text-ink-900">{pengguna.nama}</span>
+        {pengguna.nip ? ` (NIP ${pengguna.nip})` : ''}. Statusnya bisa dipantau di
+        halaman Peminjaman Saya.
       </p>
 
       {!alat.boleh_dipinjam && (
@@ -160,18 +187,6 @@ function FormPengajuan({ alat }) {
         <PesanGalat pesan={galat} />
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Isian label="Nama lengkap" wajib>
-            <input
-              required maxLength={120} value={form.nama_peminjam}
-              onChange={ubah('nama_peminjam')} className="input" placeholder="Contoh: Rina Kusumawati, S.Pd."
-            />
-          </Isian>
-          <Isian label="NIP / NUPTK">
-            <input
-              maxLength={30} value={form.nip_peminjam}
-              onChange={ubah('nip_peminjam')} className="input" placeholder="Opsional"
-            />
-          </Isian>
           <Isian label="Mata pelajaran">
             <input
               maxLength={80} value={form.mapel}
@@ -228,6 +243,52 @@ function FormPengajuan({ alat }) {
           Data yang Anda isi hanya dipakai petugas lab untuk memproses peminjaman ini.
         </p>
       </form>
+    </div>
+  );
+}
+
+/**
+ * Ditampilkan menggantikan formulir ketika yang membuka belum masuk, atau
+ * masuk sebagai petugas lab.
+ */
+function AjakanMasuk({ pengguna, tujuan }) {
+  const petugas = pengguna?.peran === 'admin';
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <h2 className="font-display text-lg font-bold text-ink-900">Ajukan Peminjaman</h2>
+
+      {petugas ? (
+        <>
+          <p className="mt-1 text-sm text-slate-500">
+            Anda masuk sebagai petugas lab. Peminjaman atas nama guru dicatat
+            lewat panel admin, termasuk untuk guru yang belum punya akun.
+          </p>
+          <Link
+            to="/admin/peminjaman"
+            className="mt-4 inline-flex items-center gap-2 rounded-xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-600"
+          >
+            Buka Catat Peminjaman
+          </Link>
+        </>
+      ) : (
+        <>
+          <p className="mt-1 text-sm text-slate-500">
+            Peminjaman kini lewat akun guru, supaya setiap pinjaman jelas
+            penanggung jawabnya. Masuk dengan NIP Anda untuk mengajukan.
+          </p>
+          <Link
+            to="/masuk"
+            state={{ tujuan }}
+            className="mt-4 inline-flex items-center gap-2 rounded-xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-600"
+          >
+            <LogIn size={16} /> Masuk untuk mengajukan
+          </Link>
+          <p className="mt-3 text-xs text-slate-400">
+            Belum punya akun? Hubungi petugas lab untuk didaftarkan.
+          </p>
+        </>
+      )}
     </div>
   );
 }
