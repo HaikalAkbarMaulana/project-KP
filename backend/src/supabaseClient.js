@@ -1,7 +1,15 @@
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 
-dotenv.config();
+// Jalur .env ditentukan relatif terhadap berkas ini, bukan terhadap folder
+// tempat perintah dijalankan.
+//
+// Bawaan dotenv mencari .env di process.cwd(). Akibatnya skrip di
+// backend/scripts hanya jalan bila kebetulan dijalankan dari dalam folder
+// backend; dari akar proyek, .env tidak ketemu dan yang muncul adalah
+// "supabaseUrl is required" — pesan yang sama sekali tidak menyinggung
+// folder, sehingga sulit ditebak penyebabnya.
+dotenv.config({ path: new URL('../.env', import.meta.url) });
 
 // Batas waktu tiap permintaan ke Supabase.
 //
