@@ -1,7 +1,6 @@
-import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { LogIn, LogOut, ShieldCheck, ClipboardList } from 'lucide-react';
+import { Link, NavLink, Outlet } from 'react-router-dom';
 import LogoSekolah from './LogoSekolah';
-import { useAuth } from '../context/AuthContext';
+import MenuAkun from './MenuAkun';
 
 // labelPendek dipakai di layar sempit. Dengan label penuh, menu membungkus
 // jadi dua baris dan mendesak tombol di kanan sampai terpotong.
@@ -36,8 +35,13 @@ export default function PublicLayout() {
                   to={to}
                   end={akhir}
                   className={({ isActive }) =>
-                    `whitespace-nowrap rounded-lg px-2 py-1.5 sm:px-3 ${
-                      isActive ? 'bg-brand-50 text-brand-700' : 'text-slate-600 hover:text-brand-700'
+                    // Hanya yang sedang dibuka yang berwarna. Kalau semua menu
+                    // ikut hijau, tanda "saya sedang di halaman mana" hilang —
+                    // padahal itu satu-satunya tugas warna di sini.
+                    `whitespace-nowrap rounded-lg px-2.5 py-2 transition-colors sm:px-3 ${
+                      isActive
+                        ? 'bg-brand-500 text-white'
+                        : 'text-slate-600 hover:bg-brand-50 hover:text-brand-700'
                     }`
                   }
                 >
@@ -47,7 +51,7 @@ export default function PublicLayout() {
               ))}
             </nav>
 
-            <TombolAkun />
+            <MenuAkun />
           </div>
         </div>
       </header>
@@ -62,67 +66,6 @@ export default function PublicLayout() {
           <p>© {new Date().getFullYear()} SMP Negeri 3 Kedungreja — Inventaris &amp; Peminjaman Alat Lab</p>
         </div>
       </footer>
-    </div>
-  );
-}
-
-/**
- * Tombol pojok kanan atas.
- *
- * Satu pintu untuk kedua peran: selama belum masuk ia berupa tombol
- * "Masuk", dan setelah masuk ia berganti menjadi jalan pintas ke tempat
- * masing-masing — panel admin bagi petugas lab, Peminjaman Saya bagi guru.
- * Di layar sempit tulisannya disembunyikan agar menu utama tidak terdesak.
- */
-function TombolAkun() {
-  const { sudahMasuk, adalahAdmin, memuat, keluar } = useAuth();
-  const lokasi = useLocation();
-  const navigate = useNavigate();
-
-  // Selama status sesi belum pasti, ruangnya tetap dipesan supaya tata
-  // letak kepala halaman tidak melompat begitu sesinya diketahui.
-  if (memuat) return <div className="h-8 w-8 shrink-0 sm:w-24" aria-hidden="true" />;
-
-  if (!sudahMasuk) {
-    return (
-      <Link
-        to="/masuk"
-        state={{ tujuan: lokasi.pathname + lokasi.search }}
-        title="Masuk sebagai guru atau petugas lab"
-        className="flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-2 py-1.5 text-sm font-medium text-slate-500 transition-colors hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700 sm:px-3"
-      >
-        <LogIn size={15} />
-        <span className="hidden sm:inline">Masuk</span>
-        <span className="sr-only sm:hidden">Masuk</span>
-      </Link>
-    );
-  }
-
-  const tujuan = adalahAdmin ? '/admin' : '/guru/peminjaman';
-  const label = adalahAdmin ? 'Panel admin' : 'Peminjaman Saya';
-  const Ikon = adalahAdmin ? ShieldCheck : ClipboardList;
-
-  return (
-    <div className="flex shrink-0 items-center gap-1">
-      <Link
-        to={tujuan}
-        title={label}
-        className="flex items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 px-2 py-1.5 text-sm font-medium text-brand-700 hover:bg-brand-100 sm:px-3"
-      >
-        <Ikon size={15} />
-        <span className="hidden sm:inline">{label}</span>
-        <span className="sr-only sm:hidden">{label}</span>
-      </Link>
-
-      <button
-        type="button"
-        onClick={async () => { await keluar(); navigate('/', { replace: true }); }}
-        title="Keluar"
-        className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-rose-600"
-      >
-        <LogOut size={15} />
-        <span className="sr-only">Keluar</span>
-      </button>
     </div>
   );
 }
