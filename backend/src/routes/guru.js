@@ -126,6 +126,121 @@ router.post('/', wajibAdmin, async (req, res, next) => {
   }
 });
 
+/**
+ * Batas baris sekali unggah.
+ *
+ * Akun dibuat satu per satu lewat Supabase Auth — tidak ada cara massal —
+ * dan tiap akun memakan ratusan milidetik. Batas ini menjaga satu
+ * permintaan tidak berjalan begitu lama sampai ditutup paksa di tengah
+ * jalan, yang akan meninggalkan sebagian akun terbuat tanpa laporan.
+ */
+export const MAKS_BARIS_IMPOR = 150;
+
+/**
+ * Mendaftarkan banyak guru sekaligus, melaporkan nasib tiap baris.
+ *
+ * Dipisahkan dari rutenya supaya bisa diuji tanpa perlu sesi admin, dan
+ * supaya rute impor tinggal menerjemahkan hasilnya menjadi balasan HTTP.
+ */
+export async function imporBanyakGuru(baris) {
+  if (!Array.isArray(baris) || baris.length === 0) {
+    throw galatValidasi('Tidak ada baris yang bisa dibaca dari berkas.');
+  }
+  if (baris.length > MAKS_BARIS_IMPOR) {
+    throw galatValidasi(
+      `Sekali unggah maksimal ${MAKS_BARIS_IMPOR} baris. Berkas ini berisi ${baris.length} baris — ` +
+      'bagi dua lalu unggah bergantian.'
+    );
+  }
+
+  // NIP yang sudah ada diambil sekali di awal, bukan ditanyakan per baris,
+  // supaya 150 baris tidak berarti 150 perjalanan tambahan ke database.
+  const { data: terdaftar, error: errAmbil } = await supabaseAdmin
+    .from('profil').select('nip').not('nip', 'is', null);
+  if (errAmbil) throw errAmbil;
+
+  const sudahAda = new Set((terdaftar ?? []).map((p) => p.nip));
+  const adaDiBerkas = new Set();
+  const hasil = [];
+  let dibuat = 0;
+  let dilewati = 0;
+  let gagal = 0;
+
+  for (const [i, mentah] of baris.entries()) {
+    // Nomor baris mengikuti tampilan Excel: baris 1 adalah judul kolom,
+    // jadi data pertama ada di baris 2. Tanpa penyesuaian ini, petugas
+    // yang disuruh membetulkan "baris 7" akan membuka baris yang salah.
+    const nomor = i + 2;
+    const nama = String(mentah?.nama ?? '').trim();
+    const nip = String(mentah?.nip ?? '').trim();
+
+    try {
+      const isian = bacaIsianGuru({
+        nama,
+        nip,
+        mapel: mentah?.mapel ?? null,
+        no_hp: mentah?.no_hp ?? null,
+      });
+
+      if (sudahAda.has(isian.nip)) {
+        dilewati += 1;
+        hasil.push({ nomor, nama, nip, status: 'dilewati', pesan: 'NIP sudah terdaftar.' });
+        continue;
+      }
+      if (adaDiBerkas.has(isian.nip)) {
+        gagal += 1;
+        hasil.push({ nomor, nama, nip, status: 'gagal', pesan: 'NIP ganda di dalam berkas ini.' });
+        continue;
+      }
+
+      await buatSatuGuru(isian);
+      adaDiBerkas.add(isian.nip);
+      dibuat += 1;
+      hasil.push({ nomor, nama, nip, status: 'berhasil', pesan: '' });
+    } catch (err) {
+      // Satu baris bermasalah tidak membatalkan sisanya. Akun dibuat lewat
+      // Supabase Auth, jadi tidak ada transaksi yang bisa memutar balik
+      // baris-baris sebelumnya — berpura-pura semuanya batal justru akan
+      // menyesatkan. Yang jujur adalah melaporkan nasib tiap baris.
+      gagal += 1;
+      hasil.push({ nomor, nama, nip, status: 'gagal', pesan: err.message });
+    }
+  }
+
+  return { ringkasan: { terbaca: baris.length, dibuat, dilewati, gagal }, baris: hasil };
+}
+
+// POST /api/admin/guru/impor — mendaftarkan banyak guru sekaligus
+//
+// Berkas Excel-nya dibaca di browser, lalu dikirim ke sini sebagai baris
+// JSON. Dengan begitu backend tidak perlu menangani unggahan berkas, dan
+// yang sampai ke sini sudah berbentuk data biasa — tetap divalidasi ulang
+// satu per satu, karena apa pun yang datang dari browser tidak dipercaya.
+router.post('/impor', wajibAdmin, async (req, res, next) => {
+  try {
+    const data = await imporBanyakGuru(req.body?.baris);
+    const { dibuat, dilewati, gagal } = data.ringkasan;
+
+    if (dibuat > 0) {
+      await catatAktivitas({
+        admin: req.admin,
+        aksi: 'Impor akun guru',
+        keterangan: `Mengimpor ${dibuat} akun guru dari berkas Excel (${dilewati} dilewati, ${gagal} gagal)`,
+      });
+    }
+
+    res.json({
+      data,
+      pesan:
+        gagal === 0 && dilewati === 0
+          ? `${dibuat} akun guru berhasil dibuat.`
+          : `${dibuat} akun dibuat, ${dilewati} dilewati, ${gagal} gagal. Periksa rinciannya di bawah.`,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // PATCH /api/admin/guru/:id — ubah data atau aktif/nonaktifkan
 router.patch('/:id', wajibAdmin, async (req, res, next) => {
   try {

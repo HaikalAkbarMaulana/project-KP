@@ -113,9 +113,22 @@ server menolak start bila keduanya kosong. Backend berjalan di `http://localhost
 
 ### Mendaftarkan guru
 
+Cara utamanya lewat panel admin: menu **Akun Guru** → **Impor Excel**. Unduh
+templatnya, isi, lalu unggah; hasilnya dilaporkan per baris sehingga satu baris
+salah tidak menggagalkan sisanya. Baris yang NIP-nya sudah terdaftar dilewati,
+jadi berkas yang sama aman diunggah ulang setelah dibetulkan.
+
+> **Isi NIP lewat templat yang disediakan.** Excel memperlakukan sel angka
+> sebagai bilangan, dan bilangan hanya teliti sampai 15 angka berarti —
+> sedangkan NIP punya 18. NIP yang diketik di sel biasa sudah berubah
+> (`…012005` menjadi `…012000`) sebelum aplikasi sempat membacanya. Kolom NIP
+> pada templat sudah berformat Teks, dan aplikasi menolak mengimpor berkas yang
+> NIP-nya terlanjur rusak alih-alih diam-diam membuat akun yang tak bisa dipakai.
+
+Untuk satu-dua guru, tersedia juga skrip terminal:
+
 ```bash
-cd backend
-npm run buat-guru
+npm --prefix backend run buat-guru
 ```
 
 Skrip menanyakan NIP, nama, mata pelajaran, dan nomor HP. Kata sandi awalnya

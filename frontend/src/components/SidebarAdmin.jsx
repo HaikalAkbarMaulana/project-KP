@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import {
-  LayoutGrid, Boxes, ClipboardList, FileText, DoorOpen, Tags, Users, LogOut, X, ExternalLink,
+  LayoutGrid, Boxes, ClipboardList, FileText, DoorOpen, Tags, Users, LogOut, X, ExternalLink, GraduationCap,
 } from 'lucide-react';
 import LogoSekolah from './LogoSekolah';
 import { useAuth } from '../context/AuthContext';
@@ -12,6 +12,7 @@ const menu = [
   { to: '/admin/laporan', label: 'Laporan', ikon: FileText },
   { to: '/admin/ruangan', label: 'Ruangan', ikon: DoorOpen },
   { to: '/admin/kategori', label: 'Kategori', ikon: Tags },
+  { to: '/admin/guru', label: 'Akun Guru', ikon: GraduationCap },
   { to: '/admin/akun', label: 'Akun Admin', ikon: Users },
 ];
 

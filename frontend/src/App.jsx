@@ -29,6 +29,7 @@ const Laporan = lazy(() => import('./pages/admin/Laporan'));
 const DataRuangan = lazy(() => import('./pages/admin/DataRuangan'));
 const DataKategori = lazy(() => import('./pages/admin/DataKategori'));
 const AkunAdmin = lazy(() => import('./pages/admin/AkunAdmin'));
+const AkunGuru = lazy(() => import('./pages/admin/AkunGuru'));
 
 export default function App() {
   return (
@@ -74,6 +75,7 @@ export default function App() {
               <Route path="laporan" element={<Laporan />} />
               <Route path="ruangan" element={<DataRuangan />} />
               <Route path="kategori" element={<DataKategori />} />
+              <Route path="guru" element={<AkunGuru />} />
               <Route path="akun" element={<AkunAdmin />} />
             </Route>
           </Routes>

@@ -53,17 +53,21 @@ async function ambilToken() {
 // pengguna tidak boleh menatap tulisan "Memuat..." selamanya.
 const BATAS_WAKTU_MS = 30_000;
 
-async function permintaan(path, { metode = 'GET', data, signal } = {}) {
+async function permintaan(path, { metode = 'GET', data, signal, batasWaktuMs } = {}) {
   const token = await ambilToken();
 
   // Pembatalan dirakit manual, bukan AbortSignal.any(), karena komputer
   // sekolah sering memakai browser versi lama yang belum mendukungnya.
   const kontrol = new AbortController();
   let habisWaktu = false;
+  // Sebagian permintaan memang wajar berjalan lama — impor Excel membuat
+  // akun satu per satu lewat Supabase Auth, jadi 40 guru bisa memakan
+  // puluhan detik. Batas bawaannya dibiarkan ketat; yang perlu lebih
+  // longgar menyebutkannya sendiri.
   const pewaktu = setTimeout(() => {
     habisWaktu = true;
     kontrol.abort();
-  }, BATAS_WAKTU_MS);
+  }, batasWaktuMs ?? BATAS_WAKTU_MS);
 
   const teruskanPembatalan = () => kontrol.abort();
   if (signal?.aborted) kontrol.abort();
