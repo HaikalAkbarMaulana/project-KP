@@ -104,13 +104,20 @@ export function AuthProvider({ children }) {
 
       // Bedakan "tidak berhak" dari "server bermasalah". Keduanya sama-sama
       // membuat pengambilan profil gagal, tapi hanya 401/403 yang benar-benar
-      // berarti akunnya tidak terdaftar. Menyamakan keduanya bikin gangguan
+      // berarti akunnya tidak berhak. Menyamakan keduanya bikin gangguan
       // server atau skema database yang belum dimigrasi terbaca seolah-olah
       // kata sandinya yang salah.
+      //
+      // Pesan dari server diteruskan apa adanya, tidak diganti kalimat
+      // seragam. Backend sudah membedakan tiga keadaan yang terlihat sama di
+      // layar tapi butuh penanganan berbeda: belum punya baris profil, akun
+      // dinonaktifkan, dan sesi tidak sah. Menyeragamkannya pernah membuat
+      // akun yang gagal didaftarkan terbaca sama persis dengan akun yang
+      // sengaja dinonaktifkan — dan itu menyesatkan yang mencari sebabnya.
       const tidakBerhak = galat?.status === 401 || galat?.status === 403;
       throw new Error(
         tidakBerhak
-          ? 'Akun ini belum terdaftar di aplikasi. Hubungi petugas lab.'
+          ? galat.message || 'Akun ini tidak berhak masuk. Hubungi petugas lab.'
           : `Kata sandi benar, tapi data akun gagal dimuat. ${galat?.message || ''}`.trim()
       );
     }

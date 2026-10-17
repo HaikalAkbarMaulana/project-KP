@@ -51,8 +51,8 @@ export default function AkunAdmin() {
       <p className="flex gap-2 rounded-xl bg-sky-50 px-4 py-3 text-sm text-sky-900">
         <Info size={16} className="mt-px shrink-0" />
         <span>
-          Hanya orang di daftar ini yang bisa masuk. Guru tidak perlu akun —
-          mereka mengajukan peminjaman lewat halaman publik.
+          Hanya orang di daftar ini yang bisa masuk ke panel admin. Akun guru
+        dikelola terpisah di menu Akun Guru.
         </span>
       </p>
 

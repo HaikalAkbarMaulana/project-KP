@@ -74,13 +74,32 @@ async function main() {
       email,
       jabatan: jabatan || null,
       aktif: true,
+      // WAJIB disebut. Bawaan kolom ini 'guru' — sengaja dipilih yang paling
+      // tidak berbahaya agar kelalaian tidak melahirkan admin baru. Tanpa
+      // baris ini, profilnya tersimpan sebagai guru lalu ditolak aturan
+      // "guru wajib punya NIP", dan akun auth-nya tertinggal tanpa profil.
+      peran: 'admin',
     });
 
     if (errProfil) {
       // Akun auth tanpa baris profil tidak akan dikenali aplikasi, jadi
       // lebih baik dibersihkan daripada menggantung.
-      await supabaseAdmin.auth.admin.deleteUser(userBaru.user.id).catch(() => {});
-      throw new Error(`Gagal menyimpan profil: ${errProfil.message}`);
+      //
+      // Penghapusannya bisa ikut gagal (Supabase kadang menolak dengan
+      // "Database error deleting user"). Kalau itu terjadi, akunnya tetap
+      // tertinggal di Supabase Auth — maka sebutkan emailnya di pesan galat
+      // supaya jelas apa yang harus dibereskan, bukan dibiarkan senyap.
+      const { error: errHapus } = await supabaseAdmin.auth.admin
+        .deleteUser(userBaru.user.id)
+        .catch((e) => ({ error: e }));
+
+      throw new Error(
+        `Gagal menyimpan profil: ${errProfil.message}` +
+        (errHapus
+          ? `\n  Akun ${email} terlanjur dibuat di Supabase Auth dan gagal dihapus otomatis.` +
+            '\n  Hapus manual lewat Supabase Dashboard -> Authentication -> Users sebelum mencoba lagi.'
+          : '')
+      );
     }
 
     console.log(`\n✔ Akun admin dibuat untuk ${nama} <${email}>`);
