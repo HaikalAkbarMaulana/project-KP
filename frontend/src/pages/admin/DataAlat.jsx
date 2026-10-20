@@ -1,12 +1,16 @@
 import { useMemo, useState } from 'react';
-import { Plus, Pencil, Trash2, Search, Download } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Download, Upload } from 'lucide-react';
 
 import { api, keQuery } from '../../lib/api';
 import { useAmbilData } from '../../hooks/useAmbilData';
 import { useTundaNilai } from '../../hooks/useTundaNilai';
 import { angka, rupiah, SUMBER_DANA } from '../../lib/format';
 import { hapusFotoAlat } from '../../lib/penyimpanan';
+import {
+  KOLOM as KOLOM_ALAT, KOLOM_WAJIB, bacaBarisAlat, buatTemplat as buatTemplatAlat,
+} from '../../lib/excelAlat';
 import Modal from '../../components/Modal';
+import DialogImporExcel from '../../components/DialogImporExcel';
 import KonfirmasiHapus from '../../components/KonfirmasiHapus';
 import UnggahFoto from '../../components/UnggahFoto';
 import { Memuat, PesanGalat, Kosong } from '../../components/Keadaan';
@@ -30,6 +34,7 @@ export default function DataAlat() {
   const [sedangEdit, setSedangEdit] = useState(null);
   const [akanDihapus, setAkanDihapus] = useState(null);
   const [pesanUnduh, setPesanUnduh] = useState('');
+  const [imporTerbuka, setImporTerbuka] = useState(false);
 
   const kataKunci = useTundaNilai(pencarian);
 
@@ -80,6 +85,12 @@ export default function DataAlat() {
             className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
           >
             <Download size={16} /> Unduh CSV
+          </button>
+          <button
+            type="button" onClick={() => setImporTerbuka(true)}
+            className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:border-brand-200 hover:text-brand-700"
+          >
+            <Upload size={16} /> Impor Excel
           </button>
           <button
             type="button"
@@ -172,6 +183,38 @@ export default function DataAlat() {
         ruangan={ruangan.data?.data ?? []}
         onTutup={() => setFormTerbuka(false)}
         onSimpan={() => { setFormTerbuka(false); muatUlang(); }}
+      />
+
+      <DialogImporExcel
+        terbuka={imporTerbuka}
+        onTutup={() => setImporTerbuka(false)}
+        onSelesai={muatUlang}
+        judul="Impor Data Alat dari Excel"
+        kolom={KOLOM_ALAT}
+        kolomWajib={KOLOM_WAJIB}
+        namaTemplat="templat-data-alat.xlsx"
+        buatTemplat={buatTemplatAlat}
+        bacaBaris={bacaBarisAlat}
+        maksBaris={300}
+        kolomPratinjau={[
+          { kunci: 'kode_alat', label: 'Kode' },
+          { kunci: 'nama_alat', label: 'Nama Alat' },
+          { kunci: 'kategori', label: 'Kategori' },
+          { kunci: 'ruangan', label: 'Ruangan' },
+          { kunci: 'jumlah_baik', label: 'Baik' },
+          { kunci: 'jumlah_rusak', label: 'Rusak' },
+          { kunci: 'boleh_dipinjam', label: 'Dipinjamkan', tampil: (v) => (v ? 'Ya' : 'Tidak') },
+        ]}
+        petunjuk={
+          <p className="mt-2">
+            Kolom <span className="font-mono text-xs">Kategori</span> dan{' '}
+            <span className="font-mono text-xs">Ruangan</span> diisi{' '}
+            <strong>namanya</strong>, persis seperti yang terdaftar di menu Kategori dan
+            Ruangan. Nama yang belum terdaftar akan dilaporkan sebagai baris gagal —
+            tidak dibuatkan otomatis, supaya salah ketik tidak melahirkan kategori baru.
+          </p>
+        }
+        kirim={(b) => api.post('/alat/impor', { baris: b }, { batasWaktuMs: 300_000 })}
       />
 
       <KonfirmasiHapus

@@ -171,6 +171,149 @@ router.post('/', wajibAdmin, async (req, res, next) => {
   }
 });
 
+/**
+ * Batas baris sekali unggah.
+ *
+ * Alat disisipkan satu per satu supaya tiap baris bisa dilaporkan nasibnya
+ * sendiri. Batas ini menjaga satu permintaan tidak berjalan begitu lama
+ * sampai ditutup paksa di tengah jalan.
+ */
+const MAKS_BARIS_IMPOR = 300;
+
+/** Mencocokkan nama tanpa membedakan huruf besar-kecil maupun spasi berlebih. */
+function kunciNama(teks) {
+  return String(teks).trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+/**
+ * Mendaftarkan banyak alat sekaligus, melaporkan nasib tiap baris.
+ *
+ * Dipisahkan dari rutenya supaya bisa diuji tanpa perlu sesi admin.
+ */
+export async function imporBanyakAlat(baris) {
+  if (!Array.isArray(baris) || baris.length === 0) {
+    throw galatValidasi('Tidak ada baris yang bisa dibaca dari berkas.');
+  }
+  if (baris.length > MAKS_BARIS_IMPOR) {
+    throw galatValidasi(
+      `Sekali unggah maksimal ${MAKS_BARIS_IMPOR} baris. Berkas ini berisi ${baris.length} baris — ` +
+      'bagi dua lalu unggah bergantian.'
+    );
+  }
+
+  // Kategori, ruangan, dan kode yang sudah ada diambil sekali di awal, bukan
+  // ditanyakan per baris — 300 baris jangan berarti 900 perjalanan tambahan.
+  const [kategori, ruangan, alatAda] = await Promise.all([
+    supabaseAdmin.from('kategori').select('id, nama_kategori'),
+    supabaseAdmin.from('ruangan').select('id, nama_ruangan'),
+    supabaseAdmin.from('alat').select('kode_alat'),
+  ]);
+  for (const r of [kategori, ruangan, alatAda]) if (r.error) throw r.error;
+
+  const petaKategori = new Map((kategori.data ?? []).map((k) => [kunciNama(k.nama_kategori), k.id]));
+  const petaRuangan = new Map((ruangan.data ?? []).map((r) => [kunciNama(r.nama_ruangan), r.id]));
+  const sudahAda = new Set((alatAda.data ?? []).map((a) => kunciNama(a.kode_alat)));
+  const adaDiBerkas = new Set();
+
+  const hasil = [];
+  let dibuat = 0;
+  let dilewati = 0;
+  let gagal = 0;
+
+  for (const [i, mentah] of baris.entries()) {
+    // Nomor baris mengikuti tampilan Excel: baris 1 adalah judul kolom.
+    const nomor = i + 2;
+    const kode = String(mentah?.kode_alat ?? '').trim();
+    const nama = String(mentah?.nama_alat ?? '').trim();
+
+    try {
+      // Nama kategori/ruangan diterjemahkan ke id lebih dulu. Nama yang
+      // tidak dikenali DITOLAK, bukan dibuatkan kategori baru: satu salah
+      // ketik akan melahirkan kategori sampah yang tidak disadari siapa pun,
+      // dan merapikannya jauh lebih repot daripada membetulkan satu sel.
+      const payload = { ...mentah };
+      for (const [kolom, peta, label, daftar] of [
+        ['kategori', petaKategori, 'Kategori', kategori.data?.map((k) => k.nama_kategori)],
+        ['ruangan', petaRuangan, 'Ruangan', ruangan.data?.map((r) => r.nama_ruangan)],
+      ]) {
+        const teks = String(mentah?.[kolom] ?? '').trim();
+        delete payload[kolom];
+        if (!teks) continue;
+
+        const id = peta.get(kunciNama(teks));
+        if (!id) {
+          throw galatValidasi(
+            `${label} "${teks}" belum terdaftar. Tambahkan dulu di menu ${label}, ` +
+            `atau pakai salah satu dari: ${(daftar ?? []).join(', ')}.`
+          );
+        }
+        payload[`${kolom}_id`] = id;
+      }
+
+      const siap = susunPayloadAlat(payload, { untukPembuatan: true });
+
+      if (sudahAda.has(kunciNama(siap.kode_alat))) {
+        dilewati += 1;
+        hasil.push({ nomor, nama: nama || kode, status: 'dilewati', pesan: 'Kode alat sudah terdaftar.' });
+        continue;
+      }
+      if (adaDiBerkas.has(kunciNama(siap.kode_alat))) {
+        gagal += 1;
+        hasil.push({ nomor, nama: nama || kode, status: 'gagal', pesan: 'Kode alat ganda di dalam berkas ini.' });
+        continue;
+      }
+
+      const { error } = await supabaseAdmin.from('alat').insert(siap);
+      if (error) {
+        throw error.code === '23505'
+          ? galatKonflik(`Kode alat "${siap.kode_alat}" sudah dipakai alat lain.`)
+          : error;
+      }
+
+      adaDiBerkas.add(kunciNama(siap.kode_alat));
+      dibuat += 1;
+      hasil.push({ nomor, nama: siap.nama_alat, status: 'berhasil', pesan: '' });
+    } catch (err) {
+      // Satu baris bermasalah tidak membatalkan sisanya; nasib tiap baris
+      // dilaporkan apa adanya.
+      gagal += 1;
+      hasil.push({ nomor, nama: nama || kode, status: 'gagal', pesan: err.message });
+    }
+  }
+
+  return { ringkasan: { terbaca: baris.length, dibuat, dilewati, gagal }, baris: hasil };
+}
+
+// POST /api/alat/impor — mendaftarkan banyak alat sekaligus (ADMIN)
+//
+// Berkas Excel-nya dibaca di browser lalu dikirim ke sini sebagai baris
+// JSON, jadi backend tidak perlu menangani unggahan berkas. Tiap baris
+// tetap divalidasi ulang di sini.
+router.post('/impor', wajibAdmin, async (req, res, next) => {
+  try {
+    const data = await imporBanyakAlat(req.body?.baris);
+    const { dibuat, dilewati, gagal } = data.ringkasan;
+
+    if (dibuat > 0) {
+      await catatAktivitas({
+        admin: req.admin,
+        aksi: 'Impor data alat',
+        keterangan: `Mengimpor ${dibuat} alat dari berkas Excel (${dilewati} dilewati, ${gagal} gagal)`,
+      });
+    }
+
+    res.json({
+      data,
+      pesan:
+        gagal === 0 && dilewati === 0
+          ? `${dibuat} alat berhasil ditambahkan.`
+          : `${dibuat} alat ditambahkan, ${dilewati} dilewati, ${gagal} gagal. Periksa rinciannya di bawah.`,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // PUT /api/alat/:id — ubah data alat (ADMIN)
 router.put('/:id', wajibAdmin, async (req, res, next) => {
   try {
