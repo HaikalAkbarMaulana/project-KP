@@ -309,7 +309,6 @@ create trigger trg_sinkron_stok
 -- nama peran yang kebetulan menulis datanya.
 revoke all on function public.fn_sinkron_stok() from public, anon, authenticated;
 revoke all on function public.fn_sentuh_diperbarui() from public, anon, authenticated;
-revoke all on function public.hitung_ulang_stok() from public, anon, authenticated;
 
 -- ------------------------------------------------------------
 -- Hitung ulang jumlah_dipinjam dari nol.
@@ -328,6 +327,12 @@ as $fn$
           and p.status in ('disetujui', 'dipinjam')
      ), 0);
 $fn$;
+
+-- Pencabutan izin harus SETELAH fungsinya dibuat. Sebelumnya baris ini
+-- berada di atas bersama kedua fungsi lain, sehingga di database yang
+-- benar-benar kosong perintahnya gagal dengan "function does not exist" —
+-- dan seluruh pemasangan skema ikut berhenti di situ.
+revoke all on function public.hitung_ulang_stok() from public, anon, authenticated;
 
 -- ============================================================
 -- ROW LEVEL SECURITY
