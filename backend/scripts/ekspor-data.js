@@ -35,7 +35,7 @@ function nilaiSql(v) {
 
 function perintahSisip(tabel, kolom, baris) {
   const nilai = kolom.map((k) => nilaiSql(baris[k])).join(', ');
-  return `insert into public.${tabel} (${kolom.join(', ')}) values (${nilai}) on conflict (id) do nothing;`;
+  return `insert into public.${tabel} (${kolom.join(', ')}) values (${nilai}) on conflict do nothing;`;
 }
 
 // Urutannya penting: tabel yang dirujuk harus terisi lebih dulu.
@@ -100,13 +100,26 @@ async function main() {
     '--',
     '-- Cara memakai di proyek Supabase baru:',
     '--   1. Jalankan database/schema.sql lebih dulu untuk membuat tabelnya',
-    '--   2. Tempel seluruh isi berkas ini di SQL Editor lalu jalankan',
-    '--   3. Samakan hitungan stok:  select public.hitung_ulang_stok();',
-    '--   4. Buat ulang akun admin:  cd backend && npm run buat-admin',
-    '--   5. Unggah ulang foto alat (lihat folder backup/foto-alat)',
     '--',
-    '-- Perintahnya memakai "on conflict do nothing", jadi aman dijalankan',
-    '-- berulang tanpa menggandakan data.',
+    '--   2. Kosongkan data awal bawaan schema.sql:',
+    '--        delete from public.kategori;',
+    '--        delete from public.ruangan;',
+    '--',
+    '--      WAJIB, dan harus sebelum langkah 3. schema.sql menanam',
+    '--      ruangan dan kategori bernama sama tapi ber-id BARU, sedangkan',
+    '--      berkas ini membawa id ASLI. Bila yang bawaan dibiarkan, baris',
+    '--      di bawah ditolak karena namanya bentrok — dan kalaupun',
+    '--      dilewati, data alat akan menunjuk ke id yang tidak ada.',
+    '--      Aman dijalankan selama tabel alat masih kosong.',
+    '--',
+    '--   3. Tempel seluruh isi berkas ini di SQL Editor lalu jalankan',
+    '--   4. Samakan hitungan stok:  select public.hitung_ulang_stok();',
+    '--   5. Buat ulang akun admin:  cd backend && npm run buat-admin',
+    '--   6. Unggah ulang foto alat (lihat folder backup/foto-alat)',
+    '--',
+    '-- Perintahnya memakai "on conflict do nothing" tanpa menyebut kolom,',
+    '-- jadi bentrok pada batasan unik mana pun ikut dilewati — bukan hanya',
+    '-- pada kolom id.',
     '',
     ...bagian,
     '-- Setelah ini, samakan hitungan stok:',
