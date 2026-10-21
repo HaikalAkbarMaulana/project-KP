@@ -272,7 +272,68 @@ select public.hitung_ulang_stok();
 
 ---
 
-## Deploy ke Server Sekolah
+## Deploy Online (Vercel + Render)
+
+Supaya bisa dibuka siapa pun tanpa harus berada di Wi-Fi sekolah. Keduanya
+gratis dan menerbitkan ulang otomatis setiap kali ada `git push`.
+
+Aplikasi ini dua bagian, jadi tempatnya pun dua:
+
+| Bagian | Layanan | Alasan |
+| --- | --- | --- |
+| `frontend/` | **Vercel** | Berkas statis — cepat dan tidak pernah tidur |
+| `backend/` | **Render** | Express perlu proses yang hidup terus; di platform *serverless* impor Excel bisa putus kena batas waktu, dan pembatas laju berhenti berfungsi karena hitungannya disimpan di memori satu proses |
+
+### 1. Backend di Render
+
+Pengaturannya sudah tercatat di `render.yaml`, jadi tidak perlu diketik ulang:
+
+1. render.com → **New → Blueprint** → sambungkan repo ini
+2. Render membaca `render.yaml` dan menyiapkan layanannya
+3. Isi tiga nilai di dashboard (sengaja tidak disimpan di git):
+   - `SUPABASE_URL`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+   - `FRONTEND_ORIGIN` — diisi belakangan, setelah alamat Vercel diketahui
+4. Catat alamat yang diberikan Render, misal `https://labpinjam-api.onrender.com`
+
+> **Paket gratis Render menidurkan layanan setelah ~15 menit menganggur.**
+> Permintaan pertama sesudahnya butuh 30–60 detik untuk membangunkannya.
+> Kalau aplikasi akan didemokan, buka dulu beberapa menit sebelum mulai.
+
+### 2. Frontend di Vercel
+
+1. vercel.com → **Add New → Project** → pilih repo ini
+2. **Root Directory**: `frontend` — wajib, kalau tidak Vercel membangun dari akar proyek dan gagal
+3. Isi tiga variabel lingkungan:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+   - `VITE_API_BASE_URL` → alamat Render tadi **ditambah** `/api`,
+     misal `https://labpinjam-api.onrender.com/api`
+4. Deploy
+
+Berkas `frontend/vercel.json` mengarahkan semua rute ke `index.html`. Tanpa itu,
+menyegarkan halaman di `/admin/peminjaman` akan berakhir 404 — karena rutenya
+hanya ada di browser, bukan di server.
+
+### 3. Sambungkan keduanya
+
+Kembali ke Render, isi `FRONTEND_ORIGIN` dengan alamat Vercel
+(misal `https://inventaris-smpn3.vercel.app`), lalu tunggu layanannya menyala ulang.
+
+Melewatkan langkah ini membuat seluruh permintaan diblokir browser dengan galat
+CORS. Kalau terjadi, alamat yang ditolak tercatat di log Render.
+
+### Yang perlu diingat
+
+**Supabase paket gratis dijeda setelah ~seminggu menganggur.** Hosting sebagus
+apa pun tidak menolong bila database-nya tidur — nyalakan lagi lewat Supabase
+Dashboard, dan sentuh aplikasinya sesekali agar tidak terjeda.
+
+---
+
+## Deploy ke Server Sekolah (alternatif, tanpa layanan luar)
+
+Dipakai bila sekolah lebih memilih menjalankannya di komputer sendiri.
 
 ```bash
 # Frontend

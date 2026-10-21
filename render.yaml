@@ -1,0 +1,65 @@
+# ============================================================
+#  Render — layanan backend (API Express)
+#
+#  Berkas ini membuat pengaturan Render tercatat di dalam proyek, bukan
+#  cuma diketik di dashboard lalu terlupakan. Siapa pun yang kelak
+#  mengurus aplikasi ini bisa melihat bagaimana servernya dijalankan.
+#
+#  Cara memakai:
+#    1. render.com -> New -> Blueprint
+#    2. Sambungkan repo inventarisSMPN3kedungreja/inventaris
+#    3. Render membaca berkas ini dan menyiapkan layanannya
+#    4. Isi tiga nilai rahasia di dashboard (lihat catatan di bawah)
+#
+#  Frontend TIDAK ada di sini — ia dideploy terpisah di Vercel.
+# ============================================================
+services:
+  - type: web
+    name: labpinjam-api
+    runtime: node
+    plan: free
+
+    # Hanya folder backend yang dibangun dan dijalankan. Tanpa ini Render
+    # akan mencoba memasang dependensi frontend juga, lalu gagal karena
+    # tidak menemukan skrip start di akar proyek.
+    rootDir: backend
+
+    # npm ci, bukan npm install: ia mengikuti package-lock.json apa adanya
+    # sehingga versi pustaka di server persis sama dengan yang diuji di
+    # komputer. npm install boleh menaikkan versi diam-diam.
+    buildCommand: npm ci
+    startCommand: npm start
+
+    # Render memanggil alamat ini untuk memastikan servernya hidup. Endpoint
+    # ini juga melaporkan apakah database terjangkau dan skemanya sudah
+    # sesuai, jadi sekali jalan ia menjawab dua pertanyaan.
+    healthCheckPath: /api/health
+
+    # Singapura adalah wilayah terdekat dari Indonesia yang ditawarkan
+    # Render. Bila tidak tersedia di akun Anda, ganti lewat dashboard —
+    # aplikasinya tetap jalan, hanya sedikit lebih lambat.
+    region: singapore
+
+    envVars:
+      # Bukan sekadar label. Dengan 'production', backend membaca
+      # X-Forwarded-For dari proxy Render sehingga pembatas laju melihat
+      # alamat IP pengunjung yang sebenarnya. Tanpa ini seluruh pengunjung
+      # terhitung sebagai satu orang, dan pembatasnya memblokir semua orang
+      # begitu satu orang mencapai batas.
+      - key: NODE_ENV
+        value: production
+
+      # sync: false berarti nilainya TIDAK disimpan di git — Render meminta
+      # Anda mengisinya di dashboard. Kunci service_role melewati seluruh
+      # aturan keamanan database, jadi ia tidak boleh pernah masuk repo.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+
+      # Alamat frontend di Vercel, misalnya https://inventaris-smpn3.vercel.app
+      # Boleh lebih dari satu, dipisah koma. Kalau salah, browser memblokir
+      # seluruh permintaan dengan galat CORS — dan backend akan mencatat
+      # alamat yang ditolak di log Render supaya mudah dibetulkan.
+      - key: FRONTEND_ORIGIN
+        sync: false
