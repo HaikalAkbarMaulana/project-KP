@@ -272,7 +272,32 @@ select public.hitung_ulang_stok();
 
 ---
 
-## Deploy Online (Vercel)
+## Aplikasi yang Sudah Online
+
+| | Alamat |
+| --- | --- |
+| **Situs** | https://inventaris-web-beige.vercel.app |
+| **API** | https://inventaris-api.vercel.app |
+| Cek kesehatan API | https://inventaris-api.vercel.app/api/health |
+
+Keduanya proyek Vercel terpisah dari repo yang sama — `inventaris-web`
+(root `frontend`) dan `inventaris-api` (root `backend`).
+
+Menerbitkan ulang setelah ada perubahan:
+
+```bash
+cd frontend && npx vercel deploy --prod    # setelah mengubah frontend
+cd backend  && npx vercel deploy --prod    # setelah mengubah backend
+```
+
+> **Variabel `VITE_*` dipanggang saat build.** Mengubahnya di dashboard tidak
+> berpengaruh sampai proyek frontend di-deploy ulang.
+
+> **Mengubah `FRONTEND_ORIGIN`** mengharuskan backend di-deploy ulang juga.
+
+---
+
+## Cara Deploy dari Nol (Vercel)
 
 Supaya bisa dibuka siapa pun tanpa harus berada di Wi-Fi sekolah. Gratis, dan
 menerbitkan ulang otomatis setiap kali ada `git push`.
