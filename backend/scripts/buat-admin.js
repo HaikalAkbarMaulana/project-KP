@@ -103,7 +103,7 @@ async function main() {
     }
 
     console.log(`\n✔ Akun admin dibuat untuk ${nama} <${email}>`);
-    console.log('  Masuk lewat halaman /admin/masuk di aplikasi.');
+    console.log('  Masuk lewat halaman /masuk di aplikasi, memakai email di atas.');
   } finally {
     rl.close();
   }

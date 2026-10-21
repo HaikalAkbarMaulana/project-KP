@@ -184,8 +184,8 @@ terminal alih-alih menghafalnya. Bila muncul lebih dari satu baris `Network`,
 pakai yang seangka dengan Wi-Fi laptop (`192.168.56.x` biasanya milik
 VirtualBox/VMware dan tidak bisa dibuka dari HP).
 
-Masuk sebagai admin lewat `/admin/masuk` (tautannya juga ada di pojok kanan atas
-halaman publik).
+Masuk lewat `/masuk` — satu halaman untuk kedua peran. Guru memakai NIP,
+petugas lab memakai email. Tombolnya ada di pojok kanan atas halaman publik.
 
 > `vite.config.js` hanya dibaca saat server dinyalakan. Setelah berkas itu
 > diubah, hentikan `npm run dev` dengan `Ctrl+C` lalu jalankan lagi — menyimpan

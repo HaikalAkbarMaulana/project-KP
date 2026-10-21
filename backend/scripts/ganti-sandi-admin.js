@@ -84,7 +84,7 @@ async function main() {
     if (error) throw new Error(`Gagal mengganti kata sandi: ${error.message}`);
 
     console.log(`\n✔ Kata sandi ${email} berhasil diganti.`);
-    console.log('  Coba masuk lewat halaman /admin/masuk.');
+    console.log('  Coba masuk lewat halaman /masuk.');
   } finally {
     rl.close();
   }
