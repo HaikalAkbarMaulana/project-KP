@@ -7,6 +7,7 @@ import { useAmbilData } from '../../hooks/useAmbilData';
 import { STATUS_LABEL, STATUS_WARNA, tanggalSingkat, sisaHari } from '../../lib/format';
 import { useAuth } from '../../context/AuthContext';
 import { Memuat, PesanGalat, PesanSukses, Kosong } from '../../components/Keadaan';
+import KonfirmasiHapus from '../../components/KonfirmasiHapus';
 
 const SARINGAN = [
   { nilai: '', label: 'Semua' },
@@ -16,28 +17,30 @@ const SARINGAN = [
   { nilai: 'dikembalikan', label: 'Sudah Kembali' },
 ];
 
+const LABEL_SARINGAN = Object.fromEntries(SARINGAN.map((s) => [s.nilai, s.label]));
+
 /** Riwayat peminjaman milik guru yang sedang masuk. */
 export default function PeminjamanSaya() {
   const { pengguna } = useAuth();
   const [status, setStatus] = useState('');
   const [pesan, setPesan] = useState('');
   const [galatAksi, setGalatAksi] = useState('');
+  const [akanDibatalkan, setAkanDibatalkan] = useState(null);
 
   const { data, memuat, galat, muatUlang } = useAmbilData(
     `/peminjaman/saya${status ? `?status=${status}` : ''}`
   );
   const daftar = data?.data ?? [];
 
+  // Galatnya sengaja dilempar ulang, bukan ditampung di sini: dialog
+  // konfirmasi yang memanggil fungsi ini menampilkan alasan penolakan di
+  // dalam dialognya sendiri, tepat di tempat guru sedang melihat.
   async function batalkan(item) {
     setGalatAksi('');
     setPesan('');
-    try {
-      const res = await api.post(`/peminjaman/saya/${item.id}/batal`);
-      setPesan(res.pesan);
-      muatUlang();
-    } catch (err) {
-      setGalatAksi(err.message);
-    }
+    const res = await api.post(`/peminjaman/saya/${item.id}/batal`);
+    setPesan(res.pesan);
+    muatUlang();
   }
 
   return (
@@ -73,14 +76,23 @@ export default function PeminjamanSaya() {
       {galat ? null : memuat && !data ? (
         <Memuat />
       ) : daftar.length === 0 ? (
-        <Kosong
-          judul="Belum ada pengajuan"
-          keterangan="Pengajuan yang Anda kirim dari katalog alat akan muncul di sini."
-        />
+        // Saat saringan aktif, "belum ada pengajuan" menyesatkan: guru
+        // mungkin punya beberapa pengajuan, hanya tidak pada status ini.
+        status ? (
+          <Kosong
+            judul={`Tidak ada pengajuan berstatus "${LABEL_SARINGAN[status]}"`}
+            keterangan="Pilih Semua untuk melihat seluruh pengajuan Anda."
+          />
+        ) : (
+          <Kosong
+            judul="Belum ada pengajuan"
+            keterangan="Pengajuan yang Anda kirim dari katalog alat akan muncul di sini."
+          />
+        )
       ) : (
         <div className="grid gap-3">
           {daftar.map((item) => (
-            <KartuPengajuan key={item.id} item={item} onBatal={() => batalkan(item)} />
+            <KartuPengajuan key={item.id} item={item} onBatal={() => setAkanDibatalkan(item)} />
           ))}
         </div>
       )}
@@ -91,6 +103,23 @@ export default function PeminjamanSaya() {
       >
         <PackageSearch size={16} /> Lihat katalog alat
       </Link>
+
+      {/* Sebelumnya satu sentuhan langsung membatalkan pengajuan, tanpa
+          jalan kembali. Di ponsel tombolnya persis di bawah kartu, jadi
+          salah sentuh berarti pengajuan hilang dan harus diisi ulang. */}
+      <KonfirmasiHapus
+        terbuka={Boolean(akanDibatalkan)}
+        judul="Batalkan pengajuan"
+        keterangan={
+          akanDibatalkan
+            ? `Pengajuan ${akanDibatalkan.alat?.nama_alat ?? 'alat ini'} (${akanDibatalkan.jumlah} unit) ` +
+              'akan dibatalkan. Untuk meminjam lagi, Anda perlu mengajukan dari awal.'
+            : ''
+        }
+        labelTombol="Batalkan pengajuan"
+        onTutup={() => setAkanDibatalkan(null)}
+        onKonfirmasi={() => batalkan(akanDibatalkan)}
+      />
     </div>
   );
 }

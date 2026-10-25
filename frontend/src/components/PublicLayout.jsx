@@ -13,21 +13,26 @@ export default function PublicLayout() {
   return (
     <div className="flex min-h-screen flex-col bg-slate-50">
       <header className="sticky top-0 z-10 border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6 sm:py-4">
-          <Link to="/" className="flex shrink-0 items-center gap-2.5 sm:gap-3">
-            <LogoSekolah ukuran={40} kelas="h-9 w-9 sm:h-10 sm:w-10" />
-            <div>
-              <p className="font-display text-sm font-bold leading-tight text-ink-900">LabPinjam</p>
+        {/* Di ponsel celahnya dirapatkan dan blok kiri dibiarkan menyusut.
+            Dengan gap-4 dan shrink-0 di kiri, isi bar menjumlah 399px pada
+            layar 375px begitu guru masuk -- tombol menu akun lebih lebar
+            daripada tombol "Masuk" -- sehingga halaman bisa digeser ke
+            samping. Yang mengalah adalah nama sekolah, bukan menunya. */}
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-3 sm:gap-4 sm:px-6 sm:py-4">
+          <Link to="/" className="flex min-w-0 items-center gap-2.5 sm:gap-3">
+            <LogoSekolah ukuran={40} kelas="h-9 w-9 shrink-0 sm:h-10 sm:w-10" />
+            <div className="min-w-0">
+              <p className="truncate font-display text-sm font-bold leading-tight text-ink-900">LabPinjam</p>
               {/* Nama panjang hanya di layar lebar; di ponsel ia mendesak
                   tombol petugas sampai terpotong di tepi kanan. */}
-              <p className="text-xs text-slate-500">
+              <p className="truncate text-xs text-slate-500">
                 <span className="sm:hidden">SMPN 3 Kedungreja</span>
                 <span className="hidden sm:inline">SMP Negeri 3 Kedungreja</span>
               </p>
             </div>
           </Link>
 
-          <div className="flex items-center gap-1 sm:gap-3">
+          <div className="flex shrink-0 items-center gap-1 sm:gap-3">
             <nav className="flex items-center gap-1 text-sm font-medium sm:gap-2">
               {tautanNav.map(({ to, label, labelPendek, akhir }) => (
                 <NavLink

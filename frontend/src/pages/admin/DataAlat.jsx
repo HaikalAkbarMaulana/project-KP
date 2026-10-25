@@ -282,16 +282,23 @@ function TabelAlat({ daftar, onEdit, onHapus }) {
                 </span>
               </td>
               <td className="px-5 py-3">
+                {/* aria-label, bukan hanya title: title cuma muncul saat
+                    kursor berhenti di atas tombol, jadi di layar sentuh
+                    kedua ikon ini tidak punya nama sama sekali -- termasuk
+                    bagi pembaca layar. Ukurannya dinaikkan ke 40px supaya
+                    nyaman disentuh dan tombol hapus tidak mudah tersenggol. */}
                 <div className="flex justify-end gap-1">
                   <button
-                    type="button" onClick={() => onEdit(alat)} title="Edit alat"
-                    className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-brand-700"
+                    type="button" onClick={() => onEdit(alat)}
+                    title="Edit alat" aria-label={`Edit ${alat.nama_alat}`}
+                    className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-brand-700"
                   >
                     <Pencil size={16} />
                   </button>
                   <button
-                    type="button" onClick={() => onHapus(alat)} title="Hapus alat"
-                    className="rounded-lg p-2 text-slate-500 hover:bg-rose-50 hover:text-rose-600"
+                    type="button" onClick={() => onHapus(alat)}
+                    title="Hapus alat" aria-label={`Hapus ${alat.nama_alat}`}
+                    className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 hover:bg-rose-50 hover:text-rose-600"
                   >
                     <Trash2 size={16} />
                   </button>

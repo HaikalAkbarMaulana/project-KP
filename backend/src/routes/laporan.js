@@ -12,11 +12,11 @@ const router = Router();
 const BATAS_BARIS = 10_000;
 
 /**
- * Merangkai berkas CSV.
+ * Mengirim berkas CSV sebagai unduhan.
  *
- * Pemisahnya titik koma dan diawali BOM UTF-8, karena Excel berbahasa
- * Indonesia membaca koma sebagai desimal dan tanpa BOM huruf beraksen jadi
- * berantakan.
+ * Pemisah dan BOM-nya ditentukan di lib/csv.js -- lihat penjelasannya di
+ * sana. Fungsi ini hanya menambahkan nama berkas bertanggal supaya unduhan
+ * dari hari yang berbeda tidak saling menimpa di folder Unduhan.
  */
 function kirimCsv(res, namaBerkas, isi) {
   const stempel = tanggalLokal();

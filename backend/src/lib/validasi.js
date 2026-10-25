@@ -52,11 +52,21 @@ export function desimal(nilai, label, { min = 0, maks = 1e12 } = {}) {
   return angka;
 }
 
+/**
+ * Membaca nilai benar/salah dari query string atau badan permintaan.
+ *
+ * Menerima "1"/"0" selain "true"/"false" karena itulah yang dikirim
+ * tautan di aplikasi ini -- misalnya /admin/peminjaman?terlambat=1.
+ * Sebelumnya hanya "true" yang dikenali, jadi saringan "Terlambat"
+ * diam-diam tidak berlaku: halamannya tetap menampilkan SELURUH
+ * pengajuan sambil menulis "N pengajuan yang terlambat dikembalikan",
+ * termasuk yang sudah kembali dan yang dibatalkan.
+ */
 export function boolean(nilai, bawaan = null) {
   if (nilai === undefined || nilai === null || nilai === '') return bawaan;
   if (typeof nilai === 'boolean') return nilai;
-  if (nilai === 'true') return true;
-  if (nilai === 'false') return false;
+  if (nilai === 'true' || nilai === '1') return true;
+  if (nilai === 'false' || nilai === '0') return false;
   return bawaan;
 }
 

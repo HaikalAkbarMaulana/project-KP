@@ -45,10 +45,23 @@ function bacaIsianGuru(body) {
 export async function buatSatuGuru(isian) {
   const email = emailDariNip(isian.nip);
 
+  // Dicocokkan tanpa membedakan huruf besar/kecil karena emailDariNip()
+  // menurunkan NIP ke huruf kecil. Tanpa ini, "UjiBB001" dan "ujibb001"
+  // lolos pemeriksaan ini sebagai dua NIP berbeda, lalu Supabase Auth
+  // menolaknya di langkah berikutnya -- dan pesannya menyebut NIP yang
+  // tidak akan ditemukan admin di daftar, karena yang tersimpan versi
+  // huruf besar.
   const { data: adaNip, error: errCek } = await supabaseAdmin
-    .from('profil').select('id').eq('nip', isian.nip).maybeSingle();
+    .from('profil').select('id, nama, nip').ilike('nip', isian.nip).maybeSingle();
   if (errCek) throw errCek;
-  if (adaNip) throw galatKonflik(`NIP ${isian.nip} sudah terdaftar.`);
+  if (adaNip) {
+    throw galatKonflik(
+      adaNip.nip === isian.nip
+        ? `NIP ${isian.nip} sudah terdaftar.`
+        : `NIP ${isian.nip} bentrok dengan "${adaNip.nip}" milik ${adaNip.nama}. ` +
+          'Huruf besar dan kecil dianggap sama, jadi NIP itu harus dibedakan isinya.'
+    );
+  }
 
   const { data: userBaru, error: errUser } = await supabaseAdmin.auth.admin.createUser({
     email,
@@ -159,7 +172,11 @@ export async function imporBanyakGuru(baris) {
     .from('profil').select('nip').not('nip', 'is', null);
   if (errAmbil) throw errAmbil;
 
-  const sudahAda = new Set((terdaftar ?? []).map((p) => p.nip));
+  // Dikumpulkan dalam huruf kecil, sejalan dengan pemeriksaan di
+  // buatSatuGuru(): NIP yang hanya berbeda huruf besar/kecil menghasilkan
+  // alamat Supabase Auth yang sama, jadi harus dianggap NIP yang sama.
+  const kunciNip = (nip) => String(nip).toLowerCase();
+  const sudahAda = new Set((terdaftar ?? []).map((p) => kunciNip(p.nip)));
   const adaDiBerkas = new Set();
   const hasil = [];
   let dibuat = 0;
@@ -182,19 +199,19 @@ export async function imporBanyakGuru(baris) {
         no_hp: mentah?.no_hp ?? null,
       });
 
-      if (sudahAda.has(isian.nip)) {
+      if (sudahAda.has(kunciNip(isian.nip))) {
         dilewati += 1;
         hasil.push({ nomor, nama, nip, status: 'dilewati', pesan: 'NIP sudah terdaftar.' });
         continue;
       }
-      if (adaDiBerkas.has(isian.nip)) {
+      if (adaDiBerkas.has(kunciNip(isian.nip))) {
         gagal += 1;
         hasil.push({ nomor, nama, nip, status: 'gagal', pesan: 'NIP ganda di dalam berkas ini.' });
         continue;
       }
 
       await buatSatuGuru(isian);
-      adaDiBerkas.add(isian.nip);
+      adaDiBerkas.add(kunciNip(isian.nip));
       dibuat += 1;
       hasil.push({ nomor, nama, nip, status: 'berhasil', pesan: '' });
     } catch (err) {
