@@ -53,10 +53,22 @@ router.post('/pengguna', wajibAdmin, async (req, res, next) => {
       throw galatValidasi(`Kata sandi minimal ${PANJANG_SANDI_MIN} karakter.`);
     }
 
+    // Perannya ikut dibaca supaya pesannya benar. Alamat guru berbentuk
+    // <nip>@guru.lokal dan tersimpan di tabel yang sama, jadi memakainya
+    // di sini dulu dijawab "sudah terdaftar sebagai admin" -- padahal yang
+    // memakai alamat itu seorang guru, dan petugas akan mencarinya di
+    // daftar admin tanpa pernah menemukannya.
     const { data: adaProfil, error: errCek } = await supabaseAdmin
-      .from('profil').select('id').eq('email', email).maybeSingle();
+      .from('profil').select('id, nama, peran').eq('email', email).maybeSingle();
     if (errCek) throw errCek;
-    if (adaProfil) throw galatKonflik(`Email ${email} sudah terdaftar sebagai admin.`);
+    if (adaProfil) {
+      throw galatKonflik(
+        adaProfil.peran === 'admin'
+          ? `Email ${email} sudah terdaftar sebagai admin.`
+          : `Email ${email} sudah dipakai akun guru ${adaProfil.nama}. ` +
+            'Akun guru dikelola di menu Akun Guru, bukan di sini.'
+      );
+    }
 
     const { data: userBaru, error: errUser } = await supabaseAdmin.auth.admin.createUser({
       email,

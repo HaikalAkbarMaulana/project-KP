@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Navigate, useNavigate, useLocation, Link } from 'react-router-dom';
 import { Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import LogoSekolah from '../components/LogoSekolah';
@@ -16,7 +16,7 @@ import { Memuat, PesanGalat } from '../components/Keadaan';
  * dikembalikan backend, bukan oleh pintu mana yang diketuk.
  */
 export default function Masuk() {
-  const { masuk, sudahMasuk, memuat, peran, harusGantiSandi } = useAuth();
+  const { masuk, sudahMasuk, memuat, peran, harusGantiSandi, alasanKeluar, lupakanAlasanKeluar } = useAuth();
   const navigate = useNavigate();
   const lokasi = useLocation();
 
@@ -25,6 +25,16 @@ export default function Masuk() {
   const [sandiTerlihat, setSandiTerlihat] = useState(false);
   const [galat, setGalat] = useState('');
   const [mengirim, setMengirim] = useState(false);
+
+  // Alasan dari sesi yang terputus di tengah jalan -- misalnya akunnya baru
+  // saja dinonaktifkan petugas. Ditampilkan sekali, lalu dilupakan supaya
+  // tidak menempel saat halaman ini dibuka lagi nanti.
+  useEffect(() => {
+    if (alasanKeluar) {
+      setGalat(alasanKeluar);
+      lupakanAlasanKeluar();
+    }
+  }, [alasanKeluar, lupakanAlasanKeluar]);
 
   if (memuat) return <Memuat pesan="Memeriksa sesi..." />;
 

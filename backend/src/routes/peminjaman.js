@@ -674,7 +674,7 @@ router.put('/:id', wajibAdmin, async (req, res, next) => {
 
     const { data: sekarang, error: errAmbil } = await supabaseAdmin
       .from('peminjaman')
-      .select('id, status, jumlah, tanggal_pinjam, tanggal_rencana_kembali, jumlah_kembali_rusak, jumlah_hilang, alat:alat_id(nama_alat)')
+      .select('id, status, jumlah, tanggal_pinjam, tanggal_rencana_kembali, jumlah_kembali_rusak, jumlah_hilang, alat:alat_id(nama_alat, jumlah_tersedia)')
       .eq('id', id)
       .maybeSingle();
 
@@ -722,6 +722,29 @@ router.put('/:id', wajibAdmin, async (req, res, next) => {
 
       if (kembali < pinjam) {
         throw galatValidasi('Tanggal rencana kembali tidak boleh lebih awal dari tanggal pinjam.');
+      }
+
+      // Stok diperiksa di sini, bukan diserahkan ke constraint database.
+      //
+      // Constraint baru berbunyi kalau barisnya memang sedang menahan stok,
+      // yaitu berstatus disetujui atau dipinjam. Pengajuan yang masih
+      // menunggu belum menahan apa pun, jadi jumlahnya dulu bisa dinaikkan
+      // sampai angka berapa pun dan tetap dijawab "berhasil dibetulkan" --
+      // kesalahannya baru ketahuan saat petugas menekan Setujui.
+      //
+      // Baris yang sudah menahan stok sudah dikurangkan dari jumlah_tersedia,
+      // jadi yang diperiksa hanya selisih tambahannya.
+      const tersedia = sekarang.alat?.jumlah_tersedia ?? 0;
+      const tambahan = ['disetujui', 'dipinjam'].includes(sekarang.status)
+        ? jumlah - sekarang.jumlah
+        : jumlah;
+
+      if (tambahan > tersedia) {
+        throw galatKonflik(
+          `Stok "${sekarang.alat?.nama_alat}" tinggal ${tersedia} unit, ` +
+          `sedangkan perbaikan ini meminta ${tambahan} unit. Pakai angka yang lebih kecil ` +
+          'atau tunggu pengembalian.'
+        );
       }
 
       Object.assign(payload, {

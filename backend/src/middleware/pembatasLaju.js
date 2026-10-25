@@ -3,12 +3,20 @@ import { GalatAplikasi } from '../lib/galat.js';
 /**
  * Pembatas laju permintaan sederhana berbasis memori.
  *
- * Dibuat tanpa dependensi tambahan karena aplikasi ini dijalankan sebagai
- * satu proses di server sekolah. Konsekuensinya: hitungan direset saat
- * server restart, dan kalau suatu saat backend dijalankan multi-proses
- * (pm2 cluster) tiap proses punya hitungan sendiri. Untuk skala SMP hal
- * itu masih memadai; bila nanti perlu lebih ketat, ganti dengan
- * express-rate-limit + penyimpanan Redis.
+ * Dibuat tanpa dependensi tambahan, dan itu menentukan sejauh mana ia
+ * bisa diandalkan. Hitungannya ada di memori proses, sedangkan backend
+ * sekarang berjalan di Vercel sebagai fungsi serverless: beberapa permintaan
+ * yang datang beruntun biasanya dilayani instance yang sama -- dan untuk itu
+ * pembatas ini bekerja, sudah diuji 20 lolos lalu 20 ditolak -- tetapi
+ * instance baru selalu mulai dari nol, sehingga batas sebenarnya bisa lebih
+ * longgar daripada angka yang tertulis.
+ *
+ * Yang dicegah: satu orang menekan tombol berulang kali atau mencoba menebak
+ * kode peminjaman dalam satu rentetan. Yang tidak dicegah: percobaan yang
+ * sengaja diperlambat atau disebar. Untuk inventaris SMP, yang bocor paling
+ * jauh adalah nama peminjam yang sudah disamarkan, jadi batas ini memadai.
+ * Bila suatu saat perlu lebih ketat, ganti dengan penyimpanan bersama
+ * (misalnya Upstash Redis) supaya hitungannya satu untuk semua instance.
  */
 export function pembatasLaju({ jendelaMs = 60_000, maks = 60, pesan } = {}) {
   const jejak = new Map();

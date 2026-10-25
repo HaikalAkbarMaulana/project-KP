@@ -68,16 +68,21 @@ export default function DaftarReferensi({ judul, keterangan, endpoint, kolomNama
                     .join(' · ')}
                 </p>
               </div>
+              {/* Seperti di Data Inventaris: title saja tidak cukup, karena
+                  ia hanya muncul saat kursor berhenti di atas tombol. Di
+                  layar sentuh kedua ikon ini jadi tanpa nama. */}
               <div className="flex shrink-0 gap-1">
                 <button
-                  type="button" onClick={() => bukaForm(baris)} title="Edit"
-                  className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-brand-700"
+                  type="button" onClick={() => bukaForm(baris)}
+                  title="Edit" aria-label={`Edit ${baris[kolomNama]}`}
+                  className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-brand-700"
                 >
                   <Pencil size={16} />
                 </button>
                 <button
-                  type="button" onClick={() => siapkanHapus(baris)} title="Hapus"
-                  className="rounded-lg p-2 text-slate-500 hover:bg-rose-50 hover:text-rose-600"
+                  type="button" onClick={() => siapkanHapus(baris)}
+                  title="Hapus" aria-label={`Hapus ${baris[kolomNama]}`}
+                  className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 hover:bg-rose-50 hover:text-rose-600"
                 >
                   <Trash2 size={16} />
                 </button>

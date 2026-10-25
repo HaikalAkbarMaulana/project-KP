@@ -21,6 +21,14 @@ export function AuthProvider({ children }) {
   const [pengguna, setPengguna] = useState(null);
   const [memuat, setMemuat] = useState(true);
 
+  // Alasan sesi yang sedang berjalan tiba-tiba berakhir.
+  //
+  // Hak akses diperiksa di setiap permintaan, bukan hanya saat masuk. Jadi
+  // ketika petugas menonaktifkan akun seorang guru, guru yang sedang membuka
+  // aplikasi langsung dilempar ke halaman masuk. Tanpa ini ia dilempar tanpa
+  // sepatah kata pun dan akan mengira aplikasinya rusak.
+  const [alasanKeluar, setAlasanKeluar] = useState('');
+
   // Menandai permintaan profil terakhir. Kalau pengguna cepat keluar-masuk,
   // balasan yang datang terlambat tidak boleh menimpa keadaan terbaru.
   const permintaanTerakhir = useRef(0);
@@ -46,7 +54,12 @@ export function AuthProvider({ children }) {
       if (nomor === permintaanTerakhir.current) setPengguna(res.data);
       return { profil: res.data, galat: null };
     } catch (err) {
-      if (nomor === permintaanTerakhir.current) setPengguna(null);
+      if (nomor === permintaanTerakhir.current) {
+        setPengguna(null);
+        // Hanya 401/403 yang berarti haknya dicabut. Gangguan jaringan
+        // atau server jangan dijelaskan seolah-olah akunnya bermasalah.
+        if (err?.status === 401 || err?.status === 403) setAlasanKeluar(err.message || '');
+      }
       return { profil: null, galat: err };
     } finally {
       if (nomor === permintaanTerakhir.current) setMemuat(false);
@@ -128,7 +141,12 @@ export function AuthProvider({ children }) {
   const keluar = useCallback(async () => {
     await supabase.auth.signOut();
     setPengguna(null);
+    // Keluar atas kemauan sendiri tidak butuh penjelasan apa pun.
+    setAlasanKeluar('');
   }, []);
+
+  /** Dipanggil halaman masuk setelah alasannya ditampilkan. */
+  const lupakanAlasanKeluar = useCallback(() => setAlasanKeluar(''), []);
 
   const nilai = useMemo(
     () => ({
@@ -145,8 +163,10 @@ export function AuthProvider({ children }) {
       masuk,
       keluar,
       segarkanProfil,
+      alasanKeluar,
+      lupakanAlasanKeluar,
     }),
-    [pengguna, memuat, masuk, keluar, segarkanProfil]
+    [pengguna, memuat, masuk, keluar, segarkanProfil, alasanKeluar, lupakanAlasanKeluar]
   );
 
   return <AuthContext.Provider value={nilai}>{children}</AuthContext.Provider>;
