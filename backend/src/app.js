@@ -17,6 +17,7 @@ import { periksaSkema, statusSkema } from './lib/periksaSkema.js';
 
 import alatRoutes from './routes/alat.js';
 import peminjamanRoutes from './routes/peminjaman.js';
+import identitasRoutes from './routes/identitas.js';
 import referensiRoutes from './routes/referensi.js';
 import dashboardRoutes from './routes/dashboard.js';
 import laporanRoutes from './routes/laporan.js';
@@ -150,6 +151,7 @@ app.get('/api/health', async (req, res, next) => {
 
 app.use('/api/alat', alatRoutes);
 app.use('/api/peminjaman', peminjamanRoutes);
+app.use('/api/identitas', identitasRoutes);
 app.use('/api', referensiRoutes); // -> /api/ruangan, /api/kategori
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/laporan', laporanRoutes);

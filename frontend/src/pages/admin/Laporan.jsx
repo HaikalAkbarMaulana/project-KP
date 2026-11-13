@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Printer, Download } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Printer, Download, Save, ChevronDown, ChevronUp } from 'lucide-react';
 
 import { api, keQuery } from '../../lib/api';
 import { useAmbilData } from '../../hooks/useAmbilData';
@@ -7,8 +7,27 @@ import { STATUS_LABEL, angka, tanggalSingkat } from '../../lib/format';
 import { Memuat, PesanGalat, Kosong } from '../../components/Keadaan';
 import LogoSekolah from '../../components/LogoSekolah';
 
-const KUNCI_ALAMAT = 'labpinjam.alamat-sekolah';
+// Nama penanda tangan tetap di peramban: isinya memang berbeda-beda
+// menurut siapa yang mencetak. Identitas sekolah sebaliknya milik sekolah,
+// jadi dipindahkan ke database lewat /api/identitas.
 const KUNCI_PENANDA = 'labpinjam.penanda-tangan';
+
+/** Dipakai sementara selagi identitas dari server belum tiba. */
+const IDENTITAS_KOSONG = {
+  pemerintah: '', dinas: '', nama_sekolah: '', alamat: '',
+  telepon: '', laman: '', posel: '', kota: '',
+};
+
+const ISIAN_KOP = [
+  ['pemerintah', 'Pemerintah daerah', 'PEMERINTAH KABUPATEN CILACAP'],
+  ['dinas', 'Dinas', 'DINAS PENDIDIKAN DAN KEBUDAYAAN'],
+  ['nama_sekolah', 'Nama sekolah', 'SMP NEGERI 3 KEDUNGREJA'],
+  ['alamat', 'Alamat', 'Jalan ... , Kedungreja, Cilacap 53263'],
+  ['telepon', 'Telepon', 'Telepon 08xxxxxxxxxx'],
+  ['laman', 'Laman', 'smpn3kedungreja.sch.id'],
+  ['posel', 'Pos-el', 'smpn3kedungreja@gmail.com'],
+  ['kota', 'Kota penandatanganan', 'Kedungreja'],
+];
 
 /** Awal dan akhir bulan berjalan, dalam waktu setempat. */
 function bulanIni() {
@@ -47,9 +66,42 @@ export default function Laporan() {
   const bawaan = bulanIni();
   const [dari, setDari] = useState(bawaan.dari);
   const [sampai, setSampai] = useState(bawaan.sampai);
-  const [alamat, setAlamat] = useState(() => bacaSimpanan(KUNCI_ALAMAT, ''));
   const [penandaTangan, setPenandaTangan] = useState(() => bacaSimpanan(KUNCI_PENANDA, ''));
   const [pesanUnduh, setPesanUnduh] = useState('');
+  const [identitas, setIdentitas] = useState(IDENTITAS_KOSONG);
+  const [pesanKop, setPesanKop] = useState('');
+  const [galatKop, setGalatKop] = useState('');
+  const [menyimpanKop, setMenyimpanKop] = useState(false);
+  const [kopTerbuka, setKopTerbuka] = useState(false);
+
+  // Identitas dibaca sekali saat halaman dibuka. Kegagalan sengaja tidak
+  // ditampilkan sebagai galat besar: laporannya tetap bisa dicetak, hanya
+  // kop suratnya kosong.
+  useEffect(() => {
+    let aktif = true;
+    api.get('/identitas')
+      .then((res) => { if (aktif) setIdentitas({ ...IDENTITAS_KOSONG, ...(res.data ?? {}) }); })
+      .catch(() => {});
+    return () => { aktif = false; };
+  }, []);
+
+  async function simpanKop() {
+    setPesanKop(''); setGalatKop(''); setMenyimpanKop(true);
+    try {
+      const res = await api.put('/identitas', identitas);
+      if (res.data) setIdentitas({ ...IDENTITAS_KOSONG, ...res.data });
+      setPesanKop(res.pesan || 'Kop surat berhasil disimpan.');
+    } catch (err) {
+      setGalatKop(err.message);
+    } finally {
+      setMenyimpanKop(false);
+    }
+  }
+
+  const ubahKop = (kolom) => (e) => {
+    setPesanKop('');
+    setIdentitas((lama) => ({ ...lama, [kolom]: e.target.value }));
+  };
 
   const path = useMemo(() => `/laporan/rekap${keQuery({ dari, sampai })}`, [dari, sampai]);
   const { data, memuat, galat, muatUlang } = useAmbilData(path);
@@ -77,7 +129,7 @@ export default function Laporan() {
           </p>
         </div>
 
-        <div className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:grid-cols-3">
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-slate-600">Dari tanggal</span>
             <input type="date" value={dari} onChange={(e) => setDari(e.target.value)} className="input" />
@@ -87,14 +139,6 @@ export default function Laporan() {
             <input type="date" value={sampai} min={dari} onChange={(e) => setSampai(e.target.value)} className="input" />
           </label>
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-slate-600">Alamat sekolah (kop surat)</span>
-            <input
-              value={alamat}
-              onChange={(e) => { setAlamat(e.target.value); simpan(KUNCI_ALAMAT, e.target.value); }}
-              className="input" placeholder="Jl. ... , Kedungreja, Cilacap"
-            />
-          </label>
-          <label className="block">
             <span className="mb-1 block text-xs font-medium text-slate-600">Penanda tangan</span>
             <input
               value={penandaTangan}
@@ -102,6 +146,62 @@ export default function Laporan() {
               className="input" placeholder="Nama petugas lab"
             />
           </label>
+        </div>
+
+        {/* Kop surat disembunyikan di balik tombol karena jarang diubah:
+            sekali disetel saat sistem dipasang, lalu dibiarkan. */}
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <button
+            type="button"
+            onClick={() => setKopTerbuka((t) => !t)}
+            className="flex w-full items-center justify-between gap-2 px-5 py-4 text-left"
+          >
+            <span>
+              <span className="block text-sm font-semibold text-ink-900">Kop surat laporan</span>
+              <span className="block text-xs text-slate-500">
+                {identitas.nama_sekolah || 'Belum disetel'} — berlaku untuk semua petugas
+              </span>
+            </span>
+            {kopTerbuka ? <ChevronUp size={18} className="shrink-0 text-slate-400" />
+                        : <ChevronDown size={18} className="shrink-0 text-slate-400" />}
+          </button>
+
+          {kopTerbuka && (
+            <div className="border-t border-slate-200 p-5">
+              <div className="grid gap-4 sm:grid-cols-2">
+                {ISIAN_KOP.map(([kolom, label, contoh]) => (
+                  <label key={kolom} className="block">
+                    <span className="mb-1 block text-xs font-medium text-slate-600">{label}</span>
+                    <input
+                      value={identitas[kolom] ?? ''}
+                      onChange={ubahKop(kolom)}
+                      className="input" placeholder={contoh}
+                    />
+                  </label>
+                ))}
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <button
+                  type="button" onClick={simpanKop} disabled={menyimpanKop}
+                  className="flex items-center gap-2 rounded-xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-50"
+                >
+                  <Save size={16} /> {menyimpanKop ? 'Menyimpan...' : 'Simpan kop surat'}
+                </button>
+                {pesanKop && <span className="text-sm text-emerald-700">{pesanKop}</span>}
+              </div>
+
+              <div className="mt-3">
+                <PesanGalat pesan={galatKop} />
+              </div>
+
+              <p className="mt-3 text-xs text-slate-400">
+                Lambang kabupaten dan logo sekolah diambil dari berkas
+                frontend/public/logo-kabupaten.png dan logo-sekolah.png.
+                Ganti kedua berkas itu bila sistem dipakai sekolah lain.
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -120,8 +220,9 @@ export default function Laporan() {
         </div>
 
         <p className="text-xs text-slate-400">
-          Alamat sekolah dan nama penanda tangan tersimpan di browser ini saja,
-          jadi tidak perlu diketik ulang setiap kali mencetak.
+          Kop surat tersimpan di database sehingga berlaku untuk semua petugas.
+          Nama penanda tangan tersimpan di browser ini saja, karena berbeda
+          menurut siapa yang mencetak.
         </p>
 
         <PesanGalat pesan={pesanUnduh} />
@@ -133,7 +234,7 @@ export default function Laporan() {
       ) : (
         <IsiLaporan
           laporan={laporan}
-          alamat={alamat}
+          identitas={identitas}
           penandaTangan={penandaTangan}
         />
       )}
@@ -141,7 +242,7 @@ export default function Laporan() {
   );
 }
 
-function IsiLaporan({ laporan, alamat, penandaTangan }) {
+function IsiLaporan({ laporan, identitas, penandaTangan }) {
   if (!laporan) return null;
   const { periode, ringkasan, perAlat, daftar } = laporan;
 
@@ -151,19 +252,43 @@ function IsiLaporan({ laporan, alamat, penandaTangan }) {
 
   return (
     <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-      {/* Kop surat */}
-      <header className="flex items-center gap-4 border-b-4 border-double border-ink-900 pb-4">
-        <LogoSekolah ukuran={80} kelas="h-16 w-16 sm:h-20 sm:w-20" />
-        <div className="min-w-0 flex-1 text-center">
-          <p className="text-sm font-semibold uppercase tracking-wide text-slate-600">
-            Pemerintah Kabupaten Cilacap
-          </p>
-          <h2 className="font-display text-xl font-bold uppercase text-ink-900 sm:text-2xl">
-            SMP Negeri 3 Kedungreja
-          </h2>
-          <p className="text-xs text-slate-500">
-            {alamat || 'Laboratorium Komputer & IPA'}
-          </p>
+      {/* Kop surat: lambang kabupaten di kiri, logo sekolah di kanan,
+          tulisan rata tengah di antaranya -- mengikuti kop surat resmi
+          sekolah. Seluruh barisnya dibaca dari tabel identitas_sekolah. */}
+      <header className="border-b-4 border-double border-ink-900 pb-3">
+        <div className="flex items-center gap-3 sm:gap-4">
+          <img
+            src="/logo-kabupaten.png" alt="Lambang Kabupaten Cilacap"
+            width={80} height={99}
+            className="h-14 w-auto shrink-0 object-contain sm:h-20"
+          />
+          <div className="min-w-0 flex-1 text-center leading-snug">
+            {identitas.pemerintah && (
+              <p className="text-sm font-semibold uppercase tracking-wide text-ink-900 sm:text-base">
+                {identitas.pemerintah}
+              </p>
+            )}
+            {identitas.dinas && (
+              <p className="text-sm font-semibold uppercase tracking-wide text-ink-900 sm:text-base">
+                {identitas.dinas}
+              </p>
+            )}
+            {identitas.nama_sekolah && (
+              <h2 className="font-display text-lg font-bold uppercase text-ink-900 sm:text-2xl">
+                {identitas.nama_sekolah}
+              </h2>
+            )}
+            {identitas.alamat && <p className="text-xs text-slate-600">{identitas.alamat}</p>}
+            {identitas.telepon && <p className="text-xs text-slate-600">{identitas.telepon}</p>}
+            {(identitas.laman || identitas.posel) && (
+              <p className="text-xs text-slate-600">
+                {identitas.laman && <>Laman : {identitas.laman}</>}
+                {identitas.laman && identitas.posel && <>{'  '}</>}
+                {identitas.posel && <>Pos-el : {identitas.posel}</>}
+              </p>
+            )}
+          </div>
+          <LogoSekolah ukuran={80} kelas="h-14 w-14 shrink-0 sm:h-20 sm:w-20" />
         </div>
       </header>
 
@@ -232,7 +357,7 @@ function IsiLaporan({ laporan, alamat, penandaTangan }) {
       {/* Ruang tanda tangan */}
       <div className="mt-10 flex justify-end">
         <div className="text-center text-sm">
-          <p>Kedungreja, {hariIni}</p>
+          <p>{identitas.kota || 'Kedungreja'}, {hariIni}</p>
           <p className="mt-1">Petugas Laboratorium,</p>
           <div className="h-16" />
           <p className="font-semibold underline">{penandaTangan || '(...............................)'}</p>

@@ -59,6 +59,34 @@ comment on column public.profil.nip is
   'Nama pengguna guru. Untuk guru tanpa NIP, isi NUPTK atau nomor lain yang ditetapkan sekolah.';
 
 -- ------------------------------------------------------------
+-- 1b. IDENTITAS SEKOLAH — isi kop surat laporan
+--
+-- Satu baris untuk seluruh sekolah, dikunci lewat kolom "tunggal" yang
+-- menjadi primary key dan hanya boleh bernilai true.
+--
+-- Disimpan di database, bukan di kode maupun di localStorage peramban:
+-- di kode berarti setiap perubahan nama atau alamat menuntut deploy
+-- ulang, sedangkan di localStorage setiap komputer harus mengetik ulang
+-- karena isinya tidak dibagi antarperangkat. Identitas sekolah milik
+-- sekolah, bukan milik satu petugas.
+--
+-- Nilai bawaannya disalin dari kop surat resmi sekolah.
+-- ------------------------------------------------------------
+create table if not exists public.identitas_sekolah (
+  tunggal boolean primary key default true,
+  pemerintah   text not null default 'PEMERINTAH KABUPATEN CILACAP',
+  dinas        text not null default 'DINAS PENDIDIKAN DAN KEBUDAYAAN',
+  nama_sekolah text not null default 'SMP NEGERI 3 KEDUNGREJA',
+  alamat       text not null default 'Jalan Bendung Manganti, Bojongsari, Kedungreja, Cilacap 53263',
+  telepon      text not null default 'Telepon 08112610181, 081391424525',
+  laman        text not null default 'smpn3kedungreja.sch.id',
+  posel        text not null default 'smpn3kedungreja@gmail.com',
+  kota         text not null default 'Kedungreja',
+  diperbarui_pada timestamptz not null default now(),
+  constraint cek_satu_baris check (tunggal)
+);
+
+-- ------------------------------------------------------------
 -- 2. RUANGAN — lokasi penyimpanan alat
 -- ------------------------------------------------------------
 create table if not exists public.ruangan (
@@ -447,6 +475,7 @@ revoke all on function public.adalah_admin() from public, anon;
 grant execute on function public.adalah_admin() to authenticated;
 
 alter table public.profil enable row level security;
+alter table public.identitas_sekolah enable row level security;
 alter table public.ruangan enable row level security;
 alter table public.kategori enable row level security;
 alter table public.alat enable row level security;
@@ -484,6 +513,10 @@ drop policy if exists "log_baca_admin" on public.log_aktivitas;
 -- peran anon terpaksa diberi izin menjalankannya.
 create policy "alat_baca_publik" on public.alat for select using (true);
 create policy "alat_tulis_admin" on public.alat for all to authenticated
+  using (public.adalah_admin()) with check (public.adalah_admin());
+
+create policy "identitas_baca_publik" on public.identitas_sekolah for select using (true);
+create policy "identitas_tulis_admin" on public.identitas_sekolah for all to authenticated
   using (public.adalah_admin()) with check (public.adalah_admin());
 
 create policy "ruangan_baca_publik" on public.ruangan for select using (true);
@@ -559,6 +592,10 @@ create policy "foto_alat_hapus_admin" on storage.objects for delete to authentic
 -- ruangan/kategori mungkin belum punya batasan unik yang dibutuhkan
 -- "on conflict" — perintahnya akan gagal, bukan sekadar dilewati.
 -- ============================================================
+insert into public.identitas_sekolah (tunggal)
+select true
+ where not exists (select 1 from public.identitas_sekolah);
+
 insert into public.ruangan (nama_ruangan, keterangan)
 select v.nama, v.ket
   from (values

@@ -215,10 +215,32 @@ petugas lab memakai email. Tombolnya ada di pojok kanan atas halaman publik.
   pengembalian. Ada penyaring khusus untuk yang terlambat, dan nomor HP guru bisa
   langsung ditelepon.
 - **Ruangan & Kategori** — data master.
+- **Laporan** — rekap periodik siap cetak berkop surat sekolah, plus unduhan CSV.
+  Isi kop suratnya (nama pemerintah daerah, dinas, nama sekolah, alamat, telepon,
+  laman, pos-el, kota penandatanganan) bisa diubah sendiri lewat panel **Kop surat
+  laporan** di halaman itu. Tersimpan di database sehingga berlaku untuk semua
+  petugas, bukan per komputer.
 - **Akun Admin** — daftarkan petugas lab lain, nonaktifkan aksesnya, atau hapus.
 - **Unduh CSV** di halaman Inventaris dan Peminjaman, siap dibuka di Excel
   (pemisah koma, diawali baris `sep=,` dan BOM UTF-8 sehingga kolomnya
   terpisah benar di Excel berbahasa Inggris maupun Indonesia).
+
+---
+
+## Memakai Sistem Ini untuk Sekolah Lain
+
+Tidak ada nama sekolah yang tertanam di dalam kode. Untuk memindahkan sistem ini
+ke sekolah lain, cukup tiga langkah:
+
+1. **Kop surat laporan** — buka panel admin → Laporan → **Kop surat laporan**,
+   isi seluruh barisnya, lalu simpan. Tersimpan di tabel `identitas_sekolah`.
+2. **Logo** — ganti dua berkas berikut, ukuran persegi atau mendekati persegi:
+   - `frontend/public/logo-sekolah.png` — logo sekolah, dipakai di bilah atas,
+     halaman masuk, katalog, dan sisi kanan kop surat.
+   - `frontend/public/logo-kabupaten.png` — lambang pemerintah daerah, dipakai di
+     sisi kiri kop surat.
+3. **Nama di bilah atas dan catatan kaki** — masih tertulis di
+   `frontend/src/components/PublicLayout.jsx`. Ganti teksnya lalu bangun ulang.
 
 ---
 
