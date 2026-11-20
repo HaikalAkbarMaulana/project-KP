@@ -14,6 +14,7 @@ import DialogImporExcel from '../../components/DialogImporExcel';
 import KonfirmasiHapus from '../../components/KonfirmasiHapus';
 import UnggahFoto from '../../components/UnggahFoto';
 import { Memuat, PesanGalat, Kosong } from '../../components/Keadaan';
+import { ISIAN_ANGKA } from '../../lib/isianAngka';
 
 const PER_HALAMAN = 25;
 
@@ -433,13 +434,13 @@ function FormAlat({ terbuka, alat, kategori, ruangan, onTutup, onSimpan }) {
           <div className="grid gap-4 sm:grid-cols-3">
             <Isian label="Layak pakai" wajib>
               <input
-                required type="number" min={0} value={form.jumlah_baik}
+                required type="number" {...ISIAN_ANGKA} min={0} value={form.jumlah_baik}
                 onChange={ubah('jumlah_baik')} className="input"
               />
             </Isian>
             <Isian label="Rusak">
               <input
-                type="number" min={0} value={form.jumlah_rusak}
+                type="number" {...ISIAN_ANGKA} min={0} value={form.jumlah_rusak}
                 onChange={ubah('jumlah_rusak')} className="input"
               />
             </Isian>
@@ -467,7 +468,7 @@ function FormAlat({ terbuka, alat, kategori, ruangan, onTutup, onSimpan }) {
             </Isian>
             <Isian label="Tahun perolehan">
               <input
-                type="number" min={1950} max={2100} value={form.tahun_perolehan}
+                type="number" {...ISIAN_ANGKA} min={1950} max={2100} value={form.tahun_perolehan}
                 onChange={ubah('tahun_perolehan')} className="input" placeholder="2024"
               />
             </Isian>
@@ -492,7 +493,7 @@ function FormAlat({ terbuka, alat, kategori, ruangan, onTutup, onSimpan }) {
                   tanpa lebih dulu membulatkan harganya.
                 */}
                 <input
-                  type="number" min={0} step="any" value={form.harga_satuan}
+                  type="number" {...ISIAN_ANGKA} min={0} step="any" value={form.harga_satuan}
                   onChange={ubah('harga_satuan')} className="input" placeholder="1500000"
                 />
               </Isian>

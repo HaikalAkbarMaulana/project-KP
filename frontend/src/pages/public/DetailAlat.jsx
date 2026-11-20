@@ -7,6 +7,7 @@ import { useAmbilData } from '../../hooks/useAmbilData';
 import { tanggalHariIni } from '../../lib/format';
 import { useAuth } from '../../context/AuthContext';
 import { Memuat, PesanGalat } from '../../components/Keadaan';
+import { ISIAN_ANGKA } from '../../lib/isianAngka';
 
 // Nama dan NIP tidak lagi ada di sini: keduanya diambil dari akun yang
 // sedang masuk, supaya satu guru tidak bisa mengajukan atas nama guru
@@ -204,7 +205,7 @@ function FormPengajuan({ alat }) {
         <div className="grid gap-4 sm:grid-cols-3">
           <Isian label="Jumlah" wajib>
             <input
-              required type="number" min={1} max={Math.max(alat.jumlah_tersedia, 1)}
+              required type="number" {...ISIAN_ANGKA} min={1} max={Math.max(alat.jumlah_tersedia, 1)}
               value={form.jumlah} onChange={ubah('jumlah')} className="input"
             />
           </Isian>

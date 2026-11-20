@@ -23,6 +23,22 @@ body {
   @apply rounded-full bg-slate-300;
 }
 
+/* Tanda panah naik-turun pada kolom angka disembunyikan.
+
+   Panahnya hanya berguna untuk angka kecil yang berubah satu-satu. Di sini
+   yang diisi adalah jumlah unit dan harga satuan, yang hampir selalu lebih
+   cepat diketik. Panah itu juga menyempitkan ruang ketik dan mengundang
+   salah klik. Lihat lib/isianAngka.js untuk perilaku ketiknya. */
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 @layer components {
   .input {
     @apply w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-ink-900

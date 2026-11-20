@@ -15,6 +15,7 @@ import { tautanWhatsApp } from '../../lib/whatsapp';
 import Modal from '../../components/Modal';
 import KonfirmasiHapus from '../../components/KonfirmasiHapus';
 import { Memuat, PesanGalat, PesanSukses, Kosong } from '../../components/Keadaan';
+import { ISIAN_ANGKA } from '../../lib/isianAngka';
 
 const PER_HALAMAN = 25;
 
@@ -718,7 +719,7 @@ function FormBetulkan({ item, onTutup, onSimpan }) {
         {masihBerjalan ? (
           <div className="grid gap-4 sm:grid-cols-3">
             <IsianCatat label="Jumlah" wajib>
-              <input required type="number" min={1} value={form.jumlah}
+              <input required type="number" {...ISIAN_ANGKA} min={1} value={form.jumlah}
                 onChange={ubah('jumlah')} className="input" />
             </IsianCatat>
             <IsianCatat label="Tanggal pinjam" wajib>
@@ -815,14 +816,14 @@ function DialogPengembalian({ item, onTutup, onSelesai }) {
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-slate-600">Kembali rusak</span>
             <input
-              type="number" min={0} max={item.jumlah} value={rusak}
+              type="number" {...ISIAN_ANGKA} min={0} max={item.jumlah} value={rusak}
               onChange={(e) => setRusak(e.target.value)} className="input"
             />
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-slate-600">Tidak kembali / hilang</span>
             <input
-              type="number" min={0} max={item.jumlah} value={hilang}
+              type="number" {...ISIAN_ANGKA} min={0} max={item.jumlah} value={hilang}
               onChange={(e) => setHilang(e.target.value)} className="input"
             />
           </label>
@@ -962,7 +963,7 @@ function FormCatatPeminjaman({ terbuka, onTutup, onSimpan }) {
             </IsianCatat>
           </div>
           <IsianCatat label="Jumlah" wajib>
-            <input required type="number" min={1} max={alatDipilih?.jumlah_tersedia || undefined}
+            <input required type="number" {...ISIAN_ANGKA} min={1} max={alatDipilih?.jumlah_tersedia || undefined}
               value={form.jumlah} onChange={ubah('jumlah')} className="input" />
           </IsianCatat>
         </div>
