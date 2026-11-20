@@ -479,8 +479,20 @@ function FormAlat({ terbuka, alat, kategori, ruangan, onTutup, onSimpan }) {
             </Isian>
             <div className="sm:col-span-2">
               <Isian label="Harga satuan (Rp)">
+                {/*
+                  step sengaja "any", bukan angka bulat seperti 1000.
+                  Di HTML, step bukan sekadar besar lompatan tombol panah —
+                  dia juga menentukan sah tidaknya nilai yang diketik. Dengan
+                  step="1000", peramban menolak harga seperti Rp 148.750
+                  dengan pesan "the two nearest valid values are 148000 and
+                  149000", padahal harga sepecahan itu lazim pada data aset
+                  yang berasal dari Kartu Inventaris Barang: harga di sana
+                  tercatat untuk sekelompok unit, lalu dibagi jumlah unitnya.
+                  Akibatnya alat yang diimpor tidak bisa disunting sama sekali
+                  tanpa lebih dulu membulatkan harganya.
+                */}
                 <input
-                  type="number" min={0} step="1000" value={form.harga_satuan}
+                  type="number" min={0} step="any" value={form.harga_satuan}
                   onChange={ubah('harga_satuan')} className="input" placeholder="1500000"
                 />
               </Isian>
