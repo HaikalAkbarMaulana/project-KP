@@ -10,11 +10,30 @@ import { X } from 'lucide-react';
 export default function Modal({ terbuka, judul, onTutup, children, lebar = 'max-w-lg' }) {
   const kotakRef = useRef(null);
 
+  // onTutup disimpan di dalam ref, bukan dijadikan kebergantungan efek.
+  //
+  // Hampir semua pemanggil menuliskan onTutup sebagai fungsi yang dibuat di
+  // dalam render, misalnya onTutup={batal}. Fungsi seperti itu beridentitas
+  // baru setiap kali komponennya dirender ulang. Kalau identitasnya ikut
+  // menjadi kebergantungan efek di bawah, maka setiap penekanan tombol di
+  // dalam formulir -- yang memang mengubah state lalu memicu render ulang --
+  // membuat efeknya dijalankan ulang, dan baris kotakRef.current.focus()
+  // merebut fokus dari kolom yang sedang diketik.
+  //
+  // Gejalanya persis seperti yang dilaporkan: mengetik satu angka, fokus
+  // lepas, lalu kolomnya harus diklik lagi untuk mengetik angka berikutnya.
+  // Ini mengenai semua kolom isian di semua dialog, bukan hanya kolom angka.
+  //
+  // Dengan ref, isi terbarunya tetap terbaca saat Esc ditekan, tetapi efeknya
+  // hanya berjalan sekali ketika dialog dibuka.
+  const tutupRef = useRef(onTutup);
+  tutupRef.current = onTutup;
+
   useEffect(() => {
     if (!terbuka) return undefined;
 
     function tekanTombol(e) {
-      if (e.key === 'Escape') onTutup();
+      if (e.key === 'Escape') tutupRef.current();
     }
 
     const gulirSemula = document.body.style.overflow;
@@ -26,7 +45,7 @@ export default function Modal({ terbuka, judul, onTutup, children, lebar = 'max-
       document.body.style.overflow = gulirSemula;
       document.removeEventListener('keydown', tekanTombol);
     };
-  }, [terbuka, onTutup]);
+  }, [terbuka]);
 
   if (!terbuka) return null;
 
